@@ -277,6 +277,74 @@ def open_window(url: str, title: str = "校园跑 · 路线工作台", auto_clos
         return False
 
 
+# ---------------------------------------------------------------- 单实例（防多开）
+_INSTANCE_HANDLE = None          # 保活：句柄一旦被 GC，锁就没了
+_MUTEX_NAME = "Local\\tsn-auto-run-single-instance"
+
+
+def acquire_single_instance(name: str = _MUTEX_NAME):
+    """抢单实例锁：抢到返回句柄（须保活到进程退出），已被占用返回 None。
+
+    Windows 用**命名互斥体**（跨进程、进程退出自动释放）；非 Windows 退化为占一个本机端口。
+    """
+    global _INSTANCE_HANDLE
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+            k32 = ctypes.windll.kernel32
+            k32.CreateMutexW.restype = wintypes.HANDLE
+            k32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+            h = k32.CreateMutexW(None, False, name)
+            if not h:
+                return None                       # 拿不到就当作已在跑，宁可不启第二个
+            if k32.GetLastError() == 183:         # ERROR_ALREADY_EXISTS
+                k32.CloseHandle(h)
+                return None
+            _INSTANCE_HANDLE = h
+            return h
+        except Exception:                        # noqa: BLE001
+            return object()                      # 互斥体不可用时不误挡
+    s = socket.socket()
+    try:
+        s.bind(("127.0.0.1", 17665))
+    except OSError:
+        s.close()
+        return None
+    _INSTANCE_HANDLE = s
+    return s
+
+
+def _last_ws_url(data_dir=None):
+    """从 launcher.log 里抠出上次的工作台地址（用于提示已在运行的实例在哪）。"""
+    try:
+        import re
+        log = os.path.join(pick_data_dir(data_dir), "30-logs", "launcher.log")
+        if not os.path.isfile(log):
+            return None
+        txt = open(log, encoding="utf-8", errors="replace").read()
+        hits = re.findall(r"工作台\s*：\s*(http://127\.0\.0\.1:\d+)", txt)
+        return hits[-1] if hits else None
+    except Exception:                            # noqa: BLE001
+        return None
+
+
+def notify_already_running(data_dir=None) -> None:
+    """已经在跑时的提示：能弹窗就弹窗（windowed 无控制台），否则写日志。"""
+    url = _last_ws_url(data_dir)
+    msg = "程序已经在运行了。\n\n请直接用已打开的工作台窗口，不要重复启动。"
+    if url:
+        msg += "\n\n当前地址：%s" % url
+    if os.name == "nt":
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(None, msg, "校园跑 · 路线工作台", 0x40)
+            return
+        except Exception:                        # noqa: BLE001
+            pass
+    print("[info] " + msg.replace("\n", " "), flush=True)
+
+
 def main():
     stdio = ensure_stdio()          # 必须在任何 print 之前（windowed 下 stdout 是 None）
     ap = argparse.ArgumentParser(description="校园跑 · 路线工作台（一键全流程）")
@@ -292,6 +360,10 @@ def main():
                     help=">0 时开窗这么多秒后自动关（打包冒烟用；0=正常开着）")
     ap.add_argument("--verbose", action="store_true")
     a = ap.parse_args()
+
+    if acquire_single_instance() is None:     # 防多开：已在运行就别再起一个
+        notify_already_running(a.data_dir)
+        return 0
 
     info = start_all(mock_port=a.mock_port, ws_port=a.ws_port,
                      data_dir=a.data_dir, verbose=a.verbose)
