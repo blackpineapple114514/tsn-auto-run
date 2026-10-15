@@ -1,0 +1,2767 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>校园跑 · 路线工作台</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --text:#e6e9ef; --muted:#8b93a5; --accent:#4c8dff; --ok:#2fbf71;
+    --warn:#e8a33d; --err:#e8564b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font:13px/1.5 -apple-system,"Segoe UI",Roboto,"Microsoft YaHei",sans-serif;
+    background:var(--bg);color:var(--text)}
+  #app{display:flex;height:100%}
+  #side{width:340px;flex:0 0 340px;background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;overflow-y:auto}
+  #map{flex:1;min-width:0;background:#0b0d11}
+  header{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  header h1{font-size:14px;margin:0;font-weight:600;letter-spacing:.02em}
+  .pill{font-size:11px;padding:2px 8px;border-radius:99px;background:var(--panel2);color:var(--muted);border:1px solid var(--line)}
+  section{padding:12px 14px;border-bottom:1px solid var(--line)}
+  section h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 9px}
+  .row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  .row label{flex:0 0 96px;color:var(--muted);font-size:12px}
+  .eyebtn{flex:0 0 auto;padding:6px 8px;line-height:1;font-size:13px;min-width:32px}
+  input,select{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    border-radius:7px;padding:6px 8px;font:inherit;outline:none}
+  input:focus,select:focus{border-color:var(--accent)}
+  input[type=checkbox]{flex:0 0 auto;accent-color:var(--accent);width:15px;height:15px}
+  button{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:7px;
+    padding:7px 10px;font:inherit;cursor:pointer;transition:.12s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button.ghost{background:transparent}
+  .btns{display:flex;flex-wrap:wrap;gap:6px}
+  .btns button{flex:0 0 auto}
+  .stat{display:flex;justify-content:space-between;padding:3px 0;font-variant-numeric:tabular-nums}
+  .stat span:first-child{color:var(--muted)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}
+  .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600}
+  .badge.ok{background:rgba(47,191,113,.15);color:var(--ok)}
+  .badge.err{background:rgba(232,86,75,.15);color:var(--err)}
+  .badge.warn{background:rgba(232,163,61,.15);color:var(--warn)}
+  .issues{margin:6px 0 0;padding:0;list-style:none;font-size:12px}
+  .issues li{padding:4px 6px;border-radius:6px;background:rgba(232,86,75,.08);color:#f0a49d;margin-bottom:4px}
+  #steps{display:flex;align-items:flex-end;gap:2px;height:56px;padding:6px 0;overflow-x:auto}
+  #steps div{flex:1 0 4px;min-width:3px;background:linear-gradient(180deg,var(--accent),#2a5fb0);border-radius:2px}
+  pre{margin:6px 0 0;background:#0b0d11;border:1px solid var(--line);border-radius:7px;padding:8px;
+    max-height:200px;overflow:auto;font:11px/1.45 ui-monospace,Consolas,monospace;color:#9fd0ff}
+  .hint{color:var(--muted);font-size:11px;margin-top:6px;line-height:1.5}
+  .leaflet-container{background:#0b0d11}
+  .wpt{background:var(--accent);border:2px solid #fff;border-radius:50%;width:12px;height:12px}
+.fenceTag{padding:1px 6px;border-radius:8px;background:rgba(255,176,32,.92);color:#3a2a00;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+  .face{font-size:16px;line-height:1;text-align:center}
+  #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#222834;border:1px solid var(--line);
+    padding:9px 16px;border-radius:9px;opacity:0;pointer-events:none;transition:.25s;z-index:9999;font-size:12px}
+  #toast.show{opacity:1}
+/* 旋转手柄（选中整条后出现，拖它绕中心转） */
+.rh{width:26px;height:26px;line-height:24px;text-align:center;border-radius:50%;background:#ff9f1c;color:#3a2a00;
+    font-weight:700;font-size:15px;border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.35);cursor:grab}
+.rh:active{cursor:grabbing}
+/* 拉缩手柄：四边 = 单轴自由拉缩（xy），四角 = 对角线等比例拉缩 */
+.rz{width:11px;height:11px;border-radius:2px;background:#fff;border:2px solid #4c8dff;
+    box-shadow:0 1px 3px rgba(0,0,0,.45)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:disabled:hover{border-color:var(--line);color:var(--text)}
+/* 「服务器」旁的小标签：点它 = 恢复「跟随所选学校」 */
+.pill.clicky{cursor:pointer}
+.pill.clicky:hover{border-color:var(--accent);color:var(--accent)}
+/* 精简版 / 完整版：没打 data-ui 的两版都显示（lite 隐藏 adv/full；full 显示全部） */
+  .qres{margin:-4px 0 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);overflow:hidden}
+  .qres[hidden]{display:none}
+  .qitem{padding:6px 9px;font-size:12px;color:var(--text);cursor:pointer;border-bottom:1px solid var(--line);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .qitem:last-child{border-bottom:0}
+  .qitem:hover{background:var(--accent);color:#fff}
+  .qitem.dim{color:var(--muted);cursor:default}
+/* 两屏：登录页（整屏独立，别无其它控件）→ 操作界面（带地图：画线/线路 + 开跑 同屏） */
+#wiz{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel2)}
+#wizUser{flex:1;min-width:0;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#bLogout{flex:0 0 auto;font-size:11px;padding:4px 10px}
+#app.locked{display:none !important}
+#loginScr{position:fixed;inset:0;z-index:900;overflow:auto;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(900px 480px at 50% 0%,#16202e,#0b0d11 72%)}
+#loginScr[hidden]{display:none !important}
+#loginScr .card{width:min(440px,92vw);margin:auto;background:var(--panel);border:1px solid var(--line);
+  border-radius:14px;padding:14px 16px;box-shadow:0 18px 48px rgba(0,0,0,.45)}
+#loginScr .card>h1{font-size:16px;margin:0 0 4px}
+#loginScr .sub{color:var(--muted);font-size:11px;line-height:1.5;margin:0 0 10px}
+#loginScr section{border-bottom:0;padding:0}
+.stepbox{margin-top:8px}
+.stepitem{display:flex;justify-content:space-between;gap:8px;padding:4px 0;font-size:12px}
+.okdot{color:var(--ok)}
+.errdot{color:var(--err)}
+.wizhint{color:var(--muted);font-size:11px;margin-top:6px;line-height:1.5}
+#app.lite [data-ui="adv"], #app.lite [data-ui="full"]{display:none !important}
+#app.full #secDraw{display:none !important}
+/* 有效区域选择弹层（登录后自动弹，必须选一个） */
+#fencePick{position:fixed;inset:0;z-index:960;display:flex;align-items:center;justify-content:center;background:rgba(6,9,14,.62)}
+#fencePick .fpCard{width:min(560px,94vw);max-height:86vh;overflow:auto;background:var(--panel,#12161d);border:1px solid var(--line,#2a3140);border-radius:14px;padding:16px 18px;box-shadow:0 20px 54px rgba(0,0,0,.5)}
+#fencePick h2{font-size:15px;margin:0 0 6px}
+.fpRec{color:var(--accent,#3b82f6);font-size:11px;font-weight:600}
+#app.dimmed{filter:grayscale(.8) brightness(.55);pointer-events:none;user-select:none}
+.fpList{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.fpItem{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:10px 12px;border:1px solid var(--line,#2a3140);border-radius:10px;background:var(--panel2,#171c25);cursor:pointer}
+.fpItem:hover{border-color:var(--accent,#3b82f6)}
+.fpItem b{font-size:13px}
+.fpItem span{font-size:11px;color:var(--muted,#8b95a7)}
+  /* 「今天能不能跑」横条 + 查询历史弹层 */
+  .todaybar{margin:10px 14px 0;padding:9px 11px;border-radius:9px;font-size:12px;line-height:1.55;border:1px solid var(--line)}
+  .todaybar.ok{background:rgba(47,191,113,.12);border-color:rgba(47,191,113,.55)}
+  .todaybar.no{background:rgba(232,86,75,.13);border-color:rgba(232,86,75,.55)}
+  .todaybar .tb-sub{color:var(--muted);font-size:11px}
+  .todaybar .tb-x{float:right;cursor:pointer;color:var(--muted);margin-left:8px;font-size:13px}
+  #histOv{position:fixed;inset:0;z-index:960;display:flex;align-items:center;justify-content:center;background:rgba(6,9,14,.62)}
+  #histOv .hCard{width:min(680px,95vw);max-height:86vh;overflow:auto;background:var(--panel,#12161d);border:1px solid var(--line,#2a3140);border-radius:14px;padding:16px 18px;box-shadow:0 20px 54px rgba(0,0,0,.5)}
+  #histOv h2{font-size:15px;margin:0 0 8px;display:flex;align-items:center;gap:8px}
+  .hRow{display:flex;gap:8px;align-items:baseline;padding:7px 2px;border-bottom:1px dashed var(--line)}
+  .hRow .hDay{font-variant-numeric:tabular-nums;width:92px;flex:0 0 92px}
+  .hRow .hKm{font-variant-numeric:tabular-nums;width:74px;flex:0 0 74px}
+  .hRow .hTime{color:var(--muted);width:66px;flex:0 0 66px;font-variant-numeric:tabular-nums}
+  .hRow .hPace{color:var(--muted);width:92px;flex:0 0 92px;font-variant-numeric:tabular-nums}
+  .hRow .hPill{font-size:11px;padding:1px 8px;border-radius:99px;border:1px solid var(--line);background:var(--panel2);color:var(--muted);white-space:nowrap}
+  .hRow.bad .hPill{border-color:rgba(232,86,75,.5);color:#ffb4b4}
+  .hSum{color:var(--muted);font-size:11px;margin-top:6px;line-height:1.6}
+  .hMonth{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+  .hMonth span{font-size:11px;padding:2px 8px;border-radius:99px;background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+</style>
+</head>
+<body>
+<div id="loginScr">
+  <div class="card">
+    <h1>校园跑 · 路线工作台 <span class="pill" id="lgPill">未登录</span></h1>
+    <div id="pane1">
+      <section>
+        <h2>登录</h2>
+        <div class="row" style="display:none"><label>链路</label>
+          <select id="chain">
+            <option value="v2" selected>v2</option>
+            <option value="v1">v1</option>
+          </select>
+        </div>
+        <div class="row"><label>省份</label><select id="prov"></select></div>
+        <div class="row"><label>搜校</label><input id="schoolQ" placeholder="全称 / 简称 / code，如 广工、华农、gdut（留空=全部）"></div>
+        <div class="row"><label>学校</label><select id="school"><option value="gdufe">广东财经大学（gdufe）</option></select></div>
+        <div class="row" id="rowManual" style="display:none"><label>手填</label><input id="schoolManual" placeholder="直接填 schoolCode，例如 gdufe"></div>
+        <div class="row"><label>账号</label><input id="uname" autocomplete="username" placeholder="登录账号"></div>
+        <div class="row"><label>密码</label><input id="upwd" type="password" autocomplete="current-password" placeholder="登录密码"><button id="pwdEye" class="eyebtn" type="button" title="显示密码" aria-label="显示密码">👁</button></div>
+        <div class="row"><label>机型</label><input id="devSearch" type="search" placeholder="搜索机型（品牌 / 型号代码）" autocomplete="off"></div>
+        <div class="row"><label></label><select id="dev" title="选定后固定（一个账号 = 一台机）"></select></div>
+        <div class="hint">建议选你平常使用的那台机型。找不到自己的机型？<a href="javascript:void(0)" id="devHelp">点这里手填 / 让 AI 帮你查</a></div>
+        <div id="devHelpBox" hidden>
+          <div class="hint">把下面这句发给 DeepSeek（或任意 AI），把【】里换成你的手机名，它会回一行 JSON：</div>
+          <textarea id="devPrompt" rows="3" readonly>请帮我查一下【我的手机型号】的安卓机型代码（ro.product.model，例如 23127PN0CC），以及品牌英文名（例如 Xiaomi）、系统（Android）、当前常见的安卓大版本号。记得开启联网搜索（如果有的话）核对。只回一行 JSON：{"brand":"","model":"","system":"Android","version":""}</textarea>
+          <div class="btns"><button type="button" id="devCopy">复制这句话</button></div>
+          <div class="hint">把 AI 回的那行 JSON 粘到下面（会自动填好下面的框）：</div>
+          <textarea id="devPaste" rows="2" placeholder='{"brand":"Xiaomi","model":"23127PN0CC","system":"Android","version":"15"}'></textarea>
+          <div class="btns"><button type="button" id="devFill">一键填入</button></div>
+          <div class="row"><label>品牌</label><input id="dBrand" type="text" placeholder="Xiaomi"></div>
+          <div class="row"><label>型号代码</label><input id="dModel" type="text" placeholder="23127PN0CC"></div>
+          <div class="row"><label>系统</label><input id="dSystem" type="text" value="Android"></div>
+          <div class="row"><label>系统版本</label><input id="dVer" type="text" placeholder="15"></div>
+          <div class="btns"><button type="button" id="devAdd">添加并选中</button></div>
+          <div class="hint" id="devAddMsg"></div>
+        </div>
+        <div class="row"><label>设为默认机型</label><input id="setDefault" type="checkbox"></div>
+        <div class="row"><label>记住密码</label><input id="rememberPwd" type="checkbox"><span class="pill" id="remTag">未记住</span></div>
+        <div class="row" style="display:none"><label>服务器</label><input id="base" value="" placeholder=""><span class="pill" id="srvTag">跟随学校</span></div>
+        <div class="row"><label>跑步类型</label><select id="lgRtype"><option value="0">自由跑</option><option value="1" selected>阳光跑</option><option value="2">晨跑（早操）</option></select></div>
+        <button id="bLogin" class="primary" style="width:100%">登录</button>
+        <div id="loginSteps" class="stepbox"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div id="app" class="lite locked">
+  <div id="side">
+    <header>
+      <h1>校园跑 · 路线工作台</h1>
+      <span class="pill" id="pill">就绪</span>
+    </header>
+    <div id="wiz">
+      <span id="wizUser">未登录</span>
+      <button id="bHist" class="ghost">查询历史</button>
+      <button id="bLogout" class="ghost">退出登录</button>
+    </div>
+    <div id="todayBar" class="todaybar" hidden></div>
+
+    <div id="pane2">
+
+    <section data-ui="adv">
+      <h2>画线</h2>
+      <div class="row"><label>搜索地点</label>
+        <input id="q" placeholder="回车搜索位置">
+      </div>
+      <div id="qres" class="qres" hidden></div>
+      <div class="row"><label>底图</label><select id="tiles"></select><span class="pill" id="tileName">探测中…</span><span class="pill" id="crsBadge">WGS-84</span></div>
+      <div class="hint">底图只是显示用，不影响导出的坐标。</div>
+      <div class="hint">极简模式只有高德底图；要更多底图切高级 / 完整模式。</div>
+      <div class="btns">
+        <button id="mPan">拖地图</button>
+        <button id="mAdd" data-ui="adv">点击加点</button>
+        <button id="mFree">自由手绘</button>
+        <button id="mMove">移动整条</button>
+        <button id="bSnap" data-ui="adv">贴合道路</button>
+      </div>
+      <div class="btns" style="margin-top:6px">
+        <button id="bUndo">撤销</button>
+        <button id="bRedo">重做</button>
+        <button id="bMid" data-ui="adv">插中点</button>
+        <button id="bSmooth" data-ui="adv">平滑去抖</button>
+        <button id="bClear">清空</button>
+        <button id="bFit" data-ui="adv">居中</button>
+      </div>
+      <div class="row" style="margin-top:9px" data-ui="adv">
+        <label>微调步长</label><input id="nudge" type="number" step="0.5" min="0.1" value="2.0"><span class="pill">m</span>
+      </div>
+      <div class="row" data-ui="adv">
+        <label>旋转步长</label><input id="rstep" type="number" step="5" min="0.1" value="15"><span class="pill">°</span>
+      </div>
+      <div class="btns" style="margin-top:6px">
+        <button id="bRotL">↺ 逆时针</button>
+        <button id="bRotR">↻ 顺时针</button>
+      </div>
+      <div class="row" style="margin-top:6px"><label>自动连接首尾</label>
+        <input id="autoClose" type="checkbox"><span class="pill">确认时</span>
+      </div>
+      <div class="btns" style="margin-top:6px">
+        <button id="bConfirm" style="width:100%">确认这条线路（只保留这一条）</button>
+      </div>
+      <div class="stat"><span>线路状态</span><b id="confirmState">—</b></div>
+      <div class="stat" data-ui="adv"><span>点数</span><b id="nPts">0</b></div>
+      <div class="stat" data-ui="adv"><span>折线长度</span><b id="lenP">0 m</b></div>
+      <div class="stat" data-ui="adv"><span>闭合误差</span><b id="gapP">—</b></div>
+      <div class="stat" data-ui="adv"><span>自交</span><b id="selfP">否</b></div>
+      <div class="stat" data-ui="adv"><span>采点间距</span><b id="spP">—</b></div>
+      <div class="stat" data-ui="adv"><span>中心偏移</span><b id="offP">—</b></div>
+      <div class="stat" data-ui="adv"><span>旋转角</span><b id="rotP">0°</b></div>
+      <div class="hint">「拖地图」按住左键平移地图。画线用「自由手绘」按住拖动（想挪地图按住 Alt 拖）。点「确认这条线路」后，左键点轨迹可选中，直接拖动 / 拖四角改大小 / 按 Q·E 旋转；点空白处取消并问你要不要保存。Ctrl+Z / Ctrl+Y 撤销重做。</div>
+      <div class="hint" data-ui="adv">「拖地图」按住左键平移。「点击加点」点一下加一个点（可拖动 / 右键删除）。「自由手绘」按住拖动。「移动整条」按住轨迹拖，或用方向键微调。选中后出现手柄：拖边 / 拖角改大小，拖 ↻ 或按 Q·E 旋转。Ctrl+Z / Ctrl+Y 撤销重做。</div>
+    </section>
+
+    <section id="secFence">
+      <h2>有效区域</h2>
+      <div class="row"><label>选择区域</label><select id="fenceRegion"></select></div>
+      <div class="stat"><span>当前区域</span><b id="fenceState">未指定</b></div>
+      <div class="hint" id="fenceList">登录后自动读出学校允许跑的区域，在这里随时切换。</div>
+    </section>
+
+    <section id="secDraw">
+      <h2>线路来源</h2>
+      <div class="row"><label>手绘线路</label><input id="useDraw" type="checkbox"><span class="pill" id="drawTag">关</span></div>
+      <div class="btns" id="drawTools" style="margin-top:6px">
+        <button id="bUndoL" disabled>撤销</button>
+        <button id="bClearL" disabled>清空</button>
+        <button id="bConfirmL" class="primary" disabled>确认这条线路</button>
+      </div>
+    </section>
+
+    <section data-ui="adv">
+      <h2>路径整理</h2>
+      <div class="row"><label>处理模式</label>
+        <select id="fitMode">
+          <option value="raw">普通（原样，只去重）</option>
+          <option value="smooth">平滑（滑动平均去手抖）</option>
+          <option value="fit" selected>拟合（抽稀 + 等距重采样）</option>
+        </select>
+      </div>
+      <div class="row"><label>重采样间距</label><input id="rst" type="number" step="0.5" value="1.0"><span class="pill">m</span></div>
+      <div class="btns"><button id="bTidy" class="primary" style="width:100%">整理路径</button></div>
+      <div class="hint">按所选模式整理当前折线（可撤销）。拟合 = 点更少、更均匀，像真实 GPS。</div>
+    </section>
+
+    <section>
+      <h2>标准跑道</h2>
+      <div class="row"><label>道次</label><input id="lane" type="number" min="1" max="8" step="1" value="1"></div>
+      <div class="row" data-ui="adv"><label>直道朝向</label><input id="head" type="number" step="15" value="0"><span class="pill">°</span></div>
+      <div class="row" data-ui="adv"><label>起跑相位</label><input id="phase" type="number" step="10" value="0"><span class="pill">°</span></div>
+      <div class="hint">每次起跑位置随机。</div>
+      <div class="row" data-ui="adv"><label>采点间距</label><input id="tstep" type="number" step="0.5" value="2.0"><span class="pill">m</span></div>
+      <div class="btns"><button id="bTrack" class="primary" style="width:100%">生成跑道（地图中心）</button></div>
+      <div class="hint">生成后可直接拖拽、拖四角改大小，以适配学校操场。</div>
+      <div class="stat"><span>单圈长度</span><b id="lapP">—</b></div>
+      <div class="stat"><span>圈数（按目标）</span><b id="lapN">—</b></div>
+    </section>
+
+    <section>
+      <h2>参数</h2>
+      <div class="row"><label>目标距离</label><input id="tkm" type="number" step="0.1" value="2.0"><span class="pill">km</span></div>
+      <div class="row"><label>方向</label>
+        <select id="dir"><option value="cw">顺时针</option><option value="ccw">逆时针</option></select>
+      </div>
+      <div class="row"><label>性别</label>
+        <select id="sex"><option value="male">男</option><option value="female">女</option></select>
+      </div>
+      <div class="row"><label>配速 / km</label>
+        <input id="paceMin" type="number" min="2" max="20" step="1" value="5" style="width:64px"><span class="pill">分</span>
+        <input id="paceSec" type="number" min="0" max="59" step="1" value="30" style="width:64px"><span class="pill">秒</span>
+      </div>
+      <div class="stat"><span>步长（性别 + 配速自动）</span><b id="strideP">—</b></div>
+      <div class="row" data-ui="adv"><label>配速</label><input id="pace" type="number" step="5" value="330"><span class="pill">秒/km</span></div>
+      <div class="row" data-ui="adv"><label>采样间隔</label><input id="dt" type="number" step="0.5" value="1.0"><span class="pill">秒</span></div>
+      <div class="row" data-ui="full"><label>速度抖动</label><input id="jit" type="number" step="0.01" value="0.08"></div>
+      <div class="row" data-ui="adv"><label>循环方式</label>
+        <select id="loop"><option value="repeat">绕圈 repeat</option><option value="track">跑道连续跑 track</option><option value="pingpong">折返 pingpong</option><option value="once">只走一遍</option></select>
+      </div>
+      <div class="row" data-ui="full"><label>每圈横向漂移</label><input id="tlat" type="number" min="0" max="2" step="0.1" value="0.4"><span class="pill">m±</span></div>
+      <div class="row" data-ui="full"><label>每圈配速扰动</label><input id="tpp" type="number" min="0" max="10" step="0.5" value="3"><span class="pill">%</span></div>
+      <div class="row" data-ui="full"><label>GPS 点抖动</label><input id="cjit" type="number" min="0" max="5" step="0.1" value="0"><span class="pill">m±</span></div>
+      <div class="row" data-ui="full"><label>合规设置</label><input id="setjson" placeholder="可选：粘 app 的 RunRoleSetBean JSON（geofence / limitSpeed / totalRange 等）"></div>
+      <div class="row" data-ui="adv"><label>跑步类型</label>
+        <select id="rtype"><option value="0">自由跑</option><option value="1" selected>阳光跑</option><option value="2">晨跑（早操）</option></select>
+      </div>
+      <div class="row" data-ui="full"><label>导出坐标</label>
+        <select id="crs"><option value="gcj02">GCJ-02（高德，app 用）</option><option value="wgs84">WGS-84（原样）</option></select>
+      </div>
+      <div class="hint" data-ui="adv">循环方式、GPS 抖动、合规设置都是可选的，不明白就保持默认。</div>
+    </section>
+
+    <section data-ui="full">
+      <h2>真实感</h2>
+      <div class="row"><label>暂停次数</label><input id="pcnt" type="number" min="0" max="10" step="1" value="0"><span class="pill">次</span></div>
+      <div class="row" data-ui="adv"><label>热身</label><input id="warm" type="number" step="5" value="0"><span class="pill">秒</span></div>
+      <div class="row" data-ui="adv"><label>收尾</label><input id="cool" type="number" step="5" value="0"><span class="pill">秒</span></div>
+      <div class="row" data-ui="adv"><label>计时后尾巴</label><input id="stail" type="number" step="1" value="33"><span class="pill">秒</span></div>
+      <div class="row" data-ui="adv"><label>尾巴走速</label><input id="swalk" type="number" step="0.1" value="1.5"><span class="pill">m/s</span></div>
+      <div class="row" data-ui="adv"><label>GPS 断记概率</label><input id="outage" type="number" min="0" max="100" step="5" value="50"><span class="pill">%</span></div>
+      <div class="row" data-ui="adv"><label>中途暂停</label><input id="pause" placeholder="如 0.5:20, 0.8:10（位置:秒）"></div>
+      <div class="row" data-ui="adv"><label>采样抖动</label><input id="dtjit" type="number" step="0.05" value="0"><span class="pill">秒</span></div>
+      <div class="hint" data-ui="full">暂停次数：填几就跑几次，位置和时长随机。</div>
+      <div class="hint" data-ui="adv">这些是让轨迹更像真人的微调，保持默认就行。</div>
+    </section>
+
+    <section data-ui="full">
+      <h2>人脸打卡</h2>
+      <div class="row"><label>开始人脸</label><input id="fS" type="checkbox"></div>
+      <div class="row"><label>结束人脸</label><input id="fE" type="checkbox"></div>
+      <div class="row"><label>中途比例</label><input id="fM" placeholder="如 0.5,0.9（逗号分隔）"></div>
+      <div class="row"><label>人脸照</label><input id="faceFile" type="file" accept="image/*"></div>
+      <div class="row"><label>扫脸</label><button id="faceCam" type="button">用电脑摄像头扫脸</button><span class="pill" id="camState"></span></div>
+      <div id="camWrap" hidden>
+        <video id="camV" playsinline autoplay muted style="width:100%;max-width:320px;border-radius:8px;background:#000"></video>
+        <div class="row" style="margin-top:6px">
+          <button id="camSnap" type="button">拍照并采用</button>
+          <button id="camStop" type="button">关闭摄像头</button>
+        </div>
+      </div>
+      <canvas id="camC" hidden></canvas>
+      <div class="hint" id="faceHint">可上传本人已注册的人脸照（jpg/png）。留空则尽量用服务器上已注册的脸。</div>
+      <div class="hint">对应 app 的开始 / 结束 / 中途人脸打卡。</div>
+    </section>
+
+    <section data-ui="full">
+      <h2>设备</h2>
+      <div class="hint">上面登录页选的机型会自动填到这里；也可以在这里直接改（以这里为准）。</div>
+      <div class="row"><label>品牌</label><input id="brand" value="iPhone"></div>
+      <div class="row"><label>型号</label><input id="model" value="iPhone 14 Pro Max"></div>
+      <div class="row"><label>系统</label><input id="sys" value="iOS"></div>
+      <div class="row"><label>系统版本</label><input id="osv" value="26.6.1"></div>
+      <div class="row"><label>app 版本</label><input id="appv" value="3.6.814"></div>
+    </section>
+
+    <section data-ui="adv">
+      <h2>生成</h2>
+      <button id="bGen" class="primary" style="width:100%">生成轨迹</button>
+      <div class="hint">按当前参数把轨迹变成一次上传数据，结果显示在「开跑」栏。</div>
+    </section>
+
+    <section id="secRun">
+      <h2>线路</h2>
+      <div class="row"><label>选择轨迹</label>
+        <select id="trackList"><option value="">（还没有轨迹）</option></select>
+      </div>
+      <div class="btns">
+        <button id="bAddTrack" class="primary">保存当前轨迹…</button>
+        <button id="bSetDefault">设为默认</button>
+      </div>
+      <div class="stat"><span>默认轨迹</span><b id="defTrack">—</b></div>
+      <div id="resultBox"></div>
+    </section>
+
+    </div>
+
+    <div id="pane3">
+      <section id="secRun2">
+        <h2>开跑</h2>
+        <div id="runSummary"></div>
+        <div class="row" data-ui="adv"><label>实时上传</label><input id="rtMode" type="checkbox" checked><span class="pill" id="rtTag">按真实用时跑完再传</span></div>
+        <div class="row" data-ui="full"><label>实时倍速</label><input id="rtSpeed" type="number" min="1" step="1" value="1"><span class="pill">1 = 真速度</span></div>
+        <div class="hint" data-ui="full">倍速把「实时」压缩：10 分钟的计划 ×60 就 10 秒跑完（上传时间仍按计划算）。</div>
+        <button id="bRun" style="width:100%" disabled>开跑（模拟跑步）</button>
+        <div id="rtBar" style="display:none">
+          <div class="stat"><span id="rtPhase">实时上传中…</span><b id="rtTime">—</b></div>
+          <progress id="rtProg" value="0" max="100" style="width:100%;height:8px"></progress>
+          <div class="hint" id="rtPos">—</div>
+          <div class="btns" style="margin-top:6px">
+            <button id="rtStopSend" class="primary">停止并上传（按已跑）</button>
+            <button id="rtStop" class="ghost">中止（不上传）</button>
+          </div>
+        </div>
+        <div id="runSteps" class="stepbox"></div>
+      </section>
+    </div>
+
+    <section data-ui="full">
+      <h2>导出 / 提交</h2>
+      <div class="wizhint">服务器地址、账号密码都在登录页。下面可以保存 / 载入路线、导出 GPX 或 JSON、提交到服务器。</div>
+      <div class="btns">
+        <button id="bSave">保存路线</button>
+        <button id="bLoad">载入</button>
+        <button id="bJson">下载 JSON</button>
+        <button id="bGpxIn">导入 GPX</button>
+        <button id="bGpxOut">导出 GPX</button>
+        <button id="bSubmit">提交到 mock</button>
+      </div>
+      <input id="gpxFile" type="file" accept=".gpx,application/gpx+xml" style="display:none">
+      <pre id="out">—</pre>
+    </section>
+
+  </div>
+  <div id="map"></div>
+</div>
+<div id="toast"></div>
+
+<script src="/static/geo.js"></script>
+<script>
+/* ============================ 基础工具 ============================ */
+const $ = s => document.querySelector(s);
+const toast = (m, ms=2200) => { const t=$('#toast'); t.textContent=m; t.classList.add('show');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'), ms); };
+
+/* ============================ 简单 / 高级模式 ============================ */
+/* 默认「简单模式」：新手只需要 画线 → 生成跑道 → 添加轨迹 → 开跑。
+   高级模式 = 原来的全部能力（路径整理 / 抖动 / 人脸 / 设备 / 链路 / 导出）。 */
+const UI = {
+  /* 两版共用同一份源码：lite 精简版（极简 + 高级合并）/ full 完整版（单开一个 exe）。
+     版本由服务端按可执行文件名判定，经 /api/config 的 edition 下发。 */
+  cur(){ return $('#app').classList.contains('full') ? 'full' : 'lite'; },
+  min(){ return this.cur() === 'lite'; },      /* 精简版 = 原「极简 + 高级」 */
+  simple(){ return this.cur() === 'lite'; },   /* 向后兼容旧「简单模式」 */
+  full(){ return this.cur() === 'full'; },
+  set(m){
+    m = (m === 'full') ? 'full' : 'lite';
+    const app = $('#app');
+    app.classList.toggle('lite', m === 'lite');
+    app.classList.toggle('full', m === 'full');
+    if(m === 'lite' && (mode === 'add' || mode === 'free')) setMode('pan');
+    /* 实时上传默认开（精简版不可改、整行隐藏；完整版可手动改） */
+    if(!UI._rtTouched && $('#rtMode')) $('#rtMode').checked = true;
+    syncRtTag();
+    renderTileSelect();                                      /* 精简版只剩高德两种影像 */
+    updateStrideReadout();
+    updateTrackBtn();                                        /* 「一键生成标准 400 m 跑道」 */
+    refreshTracks();
+    if(m === 'lite' && typeof WIZ !== 'undefined' && WIZ && WIZ.sid) enterMin();
+  },
+  init(ed){
+    this.set(ed === 'full' ? 'full' : 'lite');
+  },
+};
+const R = 6371008.8;
+const rad = d => d*Math.PI/180;
+/* 几何内核统一走 geo.js（浏览器 window.GEO / Node require 同一份实现） */
+const hav = (a,b) => GEO.haversine(a,b);
+const pathLen = pts => GEO.pathLength(pts);
+const fmtLen = m => m>=1000 ? (m/1000).toFixed(2)+' km' : Math.round(m)+' m';
+const isRing = () => GEO.isClosed(pts, 30);
+
+/* ============================ 地图 ============================ */
+const map = L.map('map',{zoomControl:true}).setView([23.1994,113.2790],15);
+
+/* 底图源：本机代理已拆，OSM 官方瓦片在国内常超时，所以按顺序探测、用第一个通的。
+   高德系（GCJ-02）实测中位 72 ms，OSM 镜像要 1400~2900 ms ⇒ 默认用高德。
+   注：高德瓦片是 GCJ-02，而内部数据一律 WGS-84，靠 toMap/fromMap 在边界换算。 */
+const TILE_SOURCES = [
+  { name:'高德 矢量路网', url:'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', subdomains:'1234', crs:'gcj02' },
+  { name:'高德 卫星影像', url:'https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}', subdomains:'1234', crs:'gcj02' },
+  { name:'高德 路网（英文注记）', url:'https://webrd0{s}.is.autonavi.com/appmaptile?lang=en&size=1&scale=1&style=8&x={x}&y={y}&z={z}', subdomains:'1234', crs:'gcj02' },
+  { name:'Esri 卫星影像', url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', crs:'wgs84' },
+  { name:'Esri 街道图',  url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', crs:'wgs84' },
+  { name:'CartoDB 浅色', url:'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', subdomains:'abcd', crs:'wgs84' },
+  { name:'CartoDB 深色', url:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', subdomains:'abcd', crs:'wgs84' },
+  { name:'OSM 官方',    url:'https://tile.openstreetmap.org/{z}/{x}/{y}.png', crs:'wgs84' },
+  { name:'OSM 德国镜像',url:'https://tile.openstreetmap.de/{z}/{x}/{y}.png', crs:'wgs84' },
+  { name:'OSM 法国 HOT',url:'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', subdomains:'abc', crs:'wgs84' }
+];
+let tileLayer = null, tileCur = 0;
+/* 当前底图坐标系。内部 pts 永远是 WGS-84（GeoJSON 序：lng,lat），
+   只在「从地图读点」和「往地图画点」两处换算，下游（GPX/导出/提交）完全不变。 */
+let BASE_CRS = 'wgs84';
+const toMap   = p  => BASE_CRS === 'gcj02' ? GEO.wgs84ToGcj02(p) : { lat: p.lat, lng: p.lng };
+const fromMap = ll => BASE_CRS === 'gcj02'
+  ? GEO.gcj02ToWgs84({ lat: ll.lat, lng: ll.lng }) : { lat: ll.lat, lng: ll.lng };
+
+function tileXY(lat, lng, z){
+  const n = Math.pow(2, z);
+  const x = Math.floor((lng + 180) / 360 * n);
+  const r = lat * Math.PI / 180;
+  const y = Math.floor((1 - Math.log(Math.tan(r) + 1/Math.cos(r)) / Math.PI) / 2 * n);
+  return [x, y];
+}
+/* 探针超时：高德/德国/法国都在 2 s 内能回，超过就是不通（官方源在国内基本必超时） */
+const TILE_PROBE_MS = 2500;
+/* 用 Image 探针（不受 CORS 限制）：能解码出图就是通 */
+function probeTile(src){
+  return new Promise(res=>{
+    const [x,y] = tileXY(23.1994, 113.2790, 12);
+    const url = src.url.replace('{z}',12).replace('{x}',x).replace('{y}',y)
+                       .replace('{s}', src.subdomains ? src.subdomains[0] : 'a');
+    const img = new Image();
+    const t = setTimeout(()=>{ img.onload=img.onerror=null; img.src=''; res(false); }, TILE_PROBE_MS);
+    img.onload  = ()=>{ clearTimeout(t); res(true); };
+    img.onerror = ()=>{ clearTimeout(t); res(false); };
+    img.src = url;
+  });
+}
+function useTiles(src){
+  if(tileLayer) map.removeLayer(tileLayer);
+  const gcj = (src.crs === 'gcj02');
+  const opt = { maxZoom:19, attribution: gcj ? '&copy; 高德地图' : '&copy; OpenStreetMap' };
+  if(src.subdomains) opt.subdomains = src.subdomains;
+  tileLayer = L.tileLayer(src.url, opt).addTo(map);
+  const el = $('#tileName'); if(el) el.textContent = src.name;
+  const crs = src.crs || 'wgs84';
+  const swapped = crs !== BASE_CRS;
+  BASE_CRS = crs;
+  const bd = $('#crsBadge'); if(bd) bd.textContent = gcj ? 'GCJ-02' : 'WGS-84';
+  if(swapped){ if(typeof pts !== 'undefined' && pts.length) redraw(); drawFence(); }   /* 换坐标系：轨迹与围栏一起重画 */
+}
+/* 记住用户选的是「哪个源」而不是下标 —— 下标会随数组重排静默指到别的源上 */
+function tvTileIdx(){
+  try{
+    const n = localStorage.getItem('route_studio.tile.name2');
+    if(n !== null){ const i = TILE_SOURCES.findIndex(s=>s.name===n); if(i >= 0) return i; }
+  }catch(e){}
+  return 0;                                    /* 默认高德（国内唯一能干活的） */
+}
+/* 探针通过的下标；null = 还没探完（先按全部排）。简单模式只给高德两种影像（GCJ-02）。 */
+let tileOK = null;
+function visibleTileIdx(){
+  const base = (tileOK && tileOK.length) ? tileOK : TILE_SOURCES.map((_,i)=>i);
+  const list = UI.simple() ? base.filter(i=>TILE_SOURCES[i].crs === 'gcj02') : base;
+  return list.length ? list : base;
+}
+function renderTileSelect(){
+  const list = visibleTileIdx();
+  if(list.indexOf(tileCur) < 0){ tileCur = list[0]; useTiles(TILE_SOURCES[tileCur]); }
+  fillTileSelect(list, tileCur);
+}
+function fillTileSelect(list, cur){
+  const sel = $('#tiles'); if(!sel) return;
+  sel.innerHTML = list.map(i=>`<option value="${i}">${TILE_SOURCES[i].name}</option>`).join('');
+  sel.value = String(cur);
+  sel.onchange = ()=>{ tileCur = +sel.value; useTiles(TILE_SOURCES[tileCur]);
+    try{ localStorage.setItem('route_studio.tile.name2', TILE_SOURCES[tileCur].name); }catch(e){} };
+}
+async function initTiles(){
+  /* 先排上可见源并可切（下拉不能空着等探针），再并行探测收敛 */
+  tileCur = tvTileIdx();
+  renderTileSelect();
+  useTiles(TILE_SOURCES[tileCur]);
+  const results = await Promise.all(TILE_SOURCES.map(s=>probeTile(s)));
+  const okIdx = results.map((ok,i)=>ok?i:-1).filter(i=>i>=0);
+  tileOK = okIdx.length ? okIdx : null;                                  /* 全不通就留全部让用户自己试 */
+  if(okIdx.length && !okIdx.includes(tileCur)){ tileCur = okIdx[0]; }     /* 当前源不通则切到第一个通的 */
+  useTiles(TILE_SOURCES[tileCur]);
+  renderTileSelect();
+  if(!okIdx.length){ toast('底图源全部连不上（外网受限）：画线 / 生成 / 导出不受影响', 6000); }
+}
+
+/* ============================ 有效区域（电子围栏） ============================ */
+/* FENCE_ALL: 登录读到的全部区域；FENCE: 当前选中的那一个；FENCE_NAMES: 区域地名（异步补）。
+   内部一律 WGS-84；只在左侧栏下拉里切换，不做任何手动框选 / 粘坐标。 */
+let FENCE = [];
+let FENCE_ALL = [];
+let fenceSel = 0;
+let FENCE_NAMES = [];
+const fenceLayer = L.layerGroup().addTo(map);
+
+function fenceNormRing(r){
+  return (r || []).map(p=>({ lat: +((p && (p.lat != null ? p.lat : p.latitude)) ?? NaN),
+                             lng: +((p && (p.lng != null ? p.lng : p.longitude)) ?? NaN) }))
+              .filter(p=>isFinite(p.lat) && isFinite(p.lng));
+}
+/* 解析各种口径：[[{lat,lng}…]…] / [{lat,lng}…] / JSON 字符串 / 内含 latitude/longitude */
+function fenceParse(g){
+  let v = g;
+  if(typeof v === 'string'){ try{ v = JSON.parse(v); }catch(e){ return null; } }
+  if(!Array.isArray(v) || !v.length) return null;
+  if(typeof v[0] === 'string'){ try{ v = JSON.parse(v[0]); }catch(e){ return null; } }
+  if(!Array.isArray(v)) return null;
+  const flat = (v[0] && (v[0].lat != null || v[0].lng != null || v[0].latitude != null));
+  const rings = (flat ? [v] : v).map(fenceNormRing).filter(r=>r.length >= 1);
+  return rings.length ? rings : null;
+}
+function fenceCenter(ring){ let la=0, lo=0; ring.forEach(p=>{ la+=p.lat; lo+=p.lng; }); return { lat: la/ring.length, lng: lo/ring.length }; }
+function drawFence(){
+  fenceLayer.clearLayers();
+  FENCE.forEach((ring,i)=>{
+    if(ring.length >= 3){                       /* ≥ 3 点 = 一个区域（多边形） */
+      const drawn = ring.map(p=>{ const m=toMap(p); return [m.lat,m.lng]; });
+      L.polygon(drawn,{color:'#ffb020',weight:2,fillColor:'#ffb020',fillOpacity:0.08,dashArray:'6 4'}).addTo(fenceLayer);
+    } else {                                    /* 退化（单点围栏）：画个圆点 */
+      const m = toMap(ring[0]);
+      L.circleMarker([m.lat,m.lng],{radius:6,color:'#ffb020',weight:2,fillColor:'#ffb020',fillOpacity:0.4}).addTo(fenceLayer);
+    }
+    const c = toMap(fenceCenter(ring));
+    L.marker([c.lat,c.lng],{interactive:false,icon:L.divIcon({className:'',html:'<div class="fenceTag">区域 '+(i+1)+'</div>',iconSize:[70,16],iconAnchor:[35,8]})}).addTo(fenceLayer);
+  });
+  const st = $('#fenceState'); if(st) st.textContent = FENCE.length ? (FENCE_NAMES[fenceSel] || ('区域 '+(fenceSel+1))) : '未指定';
+  const ls = $('#fenceList'); if(ls){
+    ls.textContent = FENCE_ALL.length ? ('共读到 ' + FENCE_ALL.length + ' 个区域，可在上面下拉里切换。') : '登录后自动读出学校允许跑的区域。';
+  }
+}
+function applyFenceSel(){
+  FENCE = (FENCE_ALL[fenceSel] ? [FENCE_ALL[fenceSel]] : []);
+  drawFence(); renderFenceSelect();
+}
+function setFenceAll(rings){
+  FENCE_ALL = (rings || []).filter(r=>r && r.length >= 1);
+  fenceSel = 0; FENCE_NAMES = FENCE_ALL.map(()=> '');
+  applyFenceSel();
+  FENCE_ALL.forEach((r,i)=>{ const c = fenceCenter(r);
+    regeoName(c.lat.toFixed(6), c.lng.toFixed(6)).then(nm=>{ if(nm){ FENCE_NAMES[i] = nm; renderFenceSelect(); drawFence(); } });
+  });
+}
+/* 左侧栏「选择区域」下拉：只列登录读到的区域，切换即换当前区域。 */
+function renderFenceSelect(){
+  const sel = $('#fenceRegion'); if(!sel) return;
+  if(!FENCE_ALL.length){ sel.innerHTML = '<option value="">（未读到区域）</option>'; sel.value = ''; return; }
+  sel.innerHTML = FENCE_ALL.map((r,i)=>{ const c = fenceCenter(r);
+    const nm = FENCE_NAMES[i] || ('区域 ' + (i+1));
+    return '<option value="' + i + '">' + nm + '（中心 ' + c.lat.toFixed(4) + ', ' + c.lng.toFixed(4) + '）</option>';
+  }).join('');
+  sel.value = String(fenceSel);
+}
+if($('#fenceRegion')) $('#fenceRegion').onchange = ()=>{
+  fenceSel = Math.max(0, +$('#fenceRegion').value || 0);
+  applyFenceSel(); centerOnFence(); updateMinFence();
+  toast('已切换到 ' + (FENCE_NAMES[fenceSel] || ('区域 ' + (fenceSel+1))), 2600);
+};
+/* 从「登录设置」里取围栏（info.geofence）。学校下发的是高德口径 GCJ-02，内部一律 WGS-84，
+   这里换算过来，免得黄框和它中心的跑道一起飘到隔壁街区。 */
+function fenceFromSetting(info){
+  const rings = fenceParse(info && info.geofence);
+  return rings ? rings.map(ring => ring.map(p => GEO.gcj02ToWgs84(p))) : [];
+}
+/* 把当前 FENCE 合进「合规设置」的 geofence（生成时自检用；没设就原样返回）。 */
+function withFence(s){
+  if(!FENCE.length) return s;
+  const o = s ? JSON.parse(JSON.stringify(s)) : {};
+  o.geofence = FENCE.map(r=>r.map(p=>({ lat: p.lat, lng: p.lng })));
+  return o;
+}
+
+/* ======================= 极简 / 高级 / 完整 三模式支撑 ======================= */
+function updateMinFence(){ renderFenceSelect(); }
+/* 按名字选底图（必须在当前模式可见的源里），并记住 */
+function pickTileByName(name){
+  const i = TILE_SOURCES.findIndex(s=>s.name===name);
+  if(i < 0 || visibleTileIdx().indexOf(i) < 0) return false;
+  tileCur = i; useTiles(TILE_SOURCES[i]); fillTileSelect(visibleTileIdx(), tileCur);
+  try{ localStorage.setItem('route_studio.tile.name2', name); }catch(e){}
+  return true;
+}
+function centerOnFence(){
+  if(!FENCE.length) return null;
+  const c = fenceCenter(FENCE[0]);
+  const m = toMap(c);
+  try{ map.setView([m.lat, m.lng], 17); }catch(e){}
+  return c;
+}
+/* 极简：卫星底图 + 区域中心放一条标准 400 m 跑道（force 或还没有轨迹时才放）*/
+function minAutoTrack(force){
+  try{ pickTileByName('高德 卫星影像'); }catch(e){}
+  const c = FENCE.length ? fenceCenter(FENCE[0]) : fromMap(map.getCenter());
+  const m = toMap(c);
+  try{ map.setView([m.lat, m.lng], 17); }catch(e){}
+  if(!(force || !pts.length || !isRing())) return;
+  const b = $('#bTrack'); if(!b) return;
+  b.click();                                  /* 复用已验证的「生成跑道」：钉在当前中心并自动选中整条 */
+  if(typeof pts !== 'undefined' && pts.length){ setAnchor(); setMode('move'); sel = true; rotAcc = 0; redraw(); }
+  toast('已在区域中心放好 400 m 跑道：直接拖动、拖四角改大小、按 Q/E 转向，然后去「开跑」', 7000);
+}
+/* 切到极简且已登录：卫星图 + 对到区域 + （没轨迹才）放跑道 */
+function enterMin(){
+  try{ pickTileByName('高德 卫星影像'); }catch(e){}
+  centerOnFence();
+  try{ if(!pts.length || !isRing()) minAutoTrack(true); }catch(e){}
+  updateMinFence();
+}
+/* 极简：开跑前把闭环轨迹随机转一下，从环上任意一点起跑（不总是从固定的那一点）。
+   非闭环（端点相距 > 30 m）原样返回，不改动。 */
+function randomizeStart(arr){
+  if(!arr || arr.length < 4) return null;
+  if(hav(arr[0], arr[arr.length-1]) >= 30) return null;   /* 与 isRing 同口径：非闭环不动 */
+  const m = arr.length - 1;                                /* 去掉重复收尾点后的环点数 */
+  const k = 1 + Math.floor(Math.random() * (m - 1));
+  const rot = [];
+  for(let i=0;i<m;i++) rot.push(arr[(k+i)%m]);
+  rot.push({ lat: rot[0].lat, lng: rot[0].lng });
+  return rot;
+}
+/* 蒙层：登录后未选区域前，把 #app 变灰且不可点（“后面内容灰色不可用”）*/
+function _fenceBlock(on){ const app = document.getElementById('app'); if(app) app.classList.toggle('dimmed', !!on); }
+/* 反查区域地名（免 key、CORS 开放的 BigDataCloud；返回「市+区」）。失败返回空串，界面回退到坐标。 */
+async function regeoName(lat, lng){
+  try{
+    const u = 'https://api.bigdatacloud.net/data/reverse-geocode-client?latitude='
+            + encodeURIComponent(lat) + '&longitude=' + encodeURIComponent(lng) + '&localityLanguage=zh-Hans';
+    const j = await fetch(u).then(r=>r.json());
+    const city = j.city || '', dist = j.locality || '', prov = j.principalSubdivision || '';
+    if(city && dist && dist !== city) return city + dist;
+    return dist || city || prov || '';
+  }catch(e){ return ''; }
+}
+/* 居中弹层：选「有效区域」。rings 至少 1 个；必须点一个才返回（返回选中下标 Promise）。
+   meta.recent = 最近一次跑步所在区域下标（标「（推荐）」）；meta.src = 'setting' | 'record'。*/
+function showFencePick(rings, meta){
+  meta = meta || {};
+  return new Promise(res=>{
+    const ov = document.createElement('div'); ov.id = 'fencePick';
+    const rows = rings.map((r,i)=>{ const c = fenceCenter(r);
+      const rec = (i === meta.recent);
+      return `<button class="fpItem" data-i="${i}"><b><span class="fpName" data-i="${i}">区域 ${i+1}</span>`
+           + (rec ? '<span class="fpRec">　（推荐）</span>' : '')
+           + `</b><span>中心 ${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}</span></button>`; }).join('');
+    const srcNote = meta.src === 'record'
+      ? '当前取到的是你最近一次跑步记录里的区域。'
+      : '这是学校下发的有效区域。';
+    ov.innerHTML = `<div class="fpCard"><h2>选一个要跑的区域</h2>`
+      + `<div class="wizhint">${srcNote}共 ${rings.length} 个，选一个才能继续。</div>`
+      + `<div class="fpList">${rows}</div></div>`;
+    document.body.appendChild(ov); _fenceBlock(true);
+    /* 地名异步补上（拿到就换掉「区域 N」；拿不到就继续显示坐标） */
+    rings.forEach((r,i)=>{ const c = fenceCenter(r);
+      regeoName(c.lat.toFixed(6), c.lng.toFixed(6)).then(nm=>{ if(!nm) return;
+        const el = ov.querySelector('.fpName[data-i="'+i+'"]'); if(el) el.textContent = nm; });
+    });
+    const close = (v)=>{ try{ ov.remove(); }catch(e){} _fenceBlock(false); res(v); };
+    ov.querySelectorAll('.fpItem').forEach(b=> b.onclick = ()=>close(+b.dataset.i));
+  });
+}
+/* 登录后（三个模式都走）：自动读账号信息 → 人脸要求 + 有效区域（先蒙住界面，选完才放行）*/
+async function applyAccountInfo(inf){
+  inf = inf || {};
+  const on1 = v => String(v)==='1' || v===true;
+  try{
+    if($('#fS')) $('#fS').checked = on1(inf.is_start_face);
+    if($('#fE')) $('#fE').checked = on1(inf.is_end_face);
+    const mid = inf.middle_faces || [];
+    if($('#fM')) $('#fM').value = mid.length ? mid.join(',') : (on1(inf.is_mid_face) ? '0.5' : '');
+  }catch(e){}
+  const rings = fenceFromSetting(inf);
+  if(!rings.length){ updateMinFence(); toast('这次没读到有效区域——请重新登录，或稍后再试', 6000); return; }
+  setFenceAll(rings);
+  if(rings.length > 1){
+    const i = await showFencePick(rings, { src: inf.geofence_from, recent: (typeof inf.recent_region === 'number' ? inf.recent_region : -1) });
+    if(i != null && i >= 0){ fenceSel = i; applyFenceSel(); }
+  }
+  centerOnFence();
+  updateMinFence();
+  if(UI.min()){ minAutoTrack(true); return; }
+  toast('已选有效区域（见地图黄框）', 4200);
+}
+/* ===================== 「今天能不能跑」：登录后自动检测（只读） ===================== */
+/* 结果影响两处：① 顶部横条 ② 「开跑」按钮是否可点（今天不能跑就灰掉、点不动）。 */
+const RUN_GATE = { canRun: null, reason: '', last: null };
+function paintTodayBar(r){
+  const el = $('#todayBar'); if(!el) return;
+  if(!r || !r.ok){ el.hidden = true; el.className = 'todaybar'; return; }
+  const t = r.today || {}, bal = r.balance || {};
+  const nm = r.run_type_name || '这条跑步';
+  const sub = [];
+  if(t.date) sub.push('今日已跑 ' + (t.count || 0) + ' 次' + (t.km ? ' / ' + (+t.km).toFixed(2) + ' km' : ''));
+  if(bal.balanceSunRun != null) sub.push('阳光跑剩余 ' + bal.balanceSunRun + '/' + (bal.validitySunRun || '?') + ' 次');
+  el.className = 'todaybar ' + (r.canRun ? 'ok' : 'no');
+  el.hidden = false;
+  el.innerHTML = '<span class="tb-x" title="重新检测">\u21bb</span>'
+    + '<b>' + (r.canRun ? '\u2705 今天还能跑' : '\u26d4 今天跑不了') + '</b>\u3000'
+    + (r.canRun ? ('（' + nm + '已开放）') : (r.reason || ''))
+    + (sub.length ? '<br><span class="tb-sub">' + sub.join('\u3000\u00b7\u3000') + '</span>' : '');
+  const x = el.querySelector('.tb-x'); if(x) x.onclick = ()=>checkToday(true);
+}
+async function checkToday(manual){
+  if(!WIZ || (!WIZ.sid && !WIZ.login)) return;
+  const dev = { brand: ($('#brand') ? $('#brand').value : undefined),
+                model: ($('#model') ? $('#model').value : undefined),
+                system: ($('#sys') ? $('#sys').value : undefined),
+                version: ($('#osv') ? $('#osv').value : undefined) };
+  const body = { server: 'real', sid: WIZ.sid || '',
+                 run_type: +($('#lgRtype') ? $('#lgRtype').value : ($('#rtype') ? $('#rtype').value : 1)),
+                 username: ($('#uname') ? $('#uname').value.trim() : ''),
+                 password: ($('#upwd') ? $('#upwd').value : ''),
+                 device: dev, app_version: ($('#appv') ? $('#appv').value : undefined) };
+  try{
+    const r = await fetch('/api/today',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)}).then(x=>x.json());
+    RUN_GATE.canRun = (r && r.ok) ? !!r.canRun : null;
+    RUN_GATE.reason = (r && r.reason) || '';
+    RUN_GATE.last = r;
+    paintTodayBar(r);
+    if(typeof onTrackPick === 'function') onTrackPick();
+    if(manual) toast((r && r.ok) ? ('检测完成：' + (r.verdict || '')) : ('检测失败：' + ((r && r.error) || '未知')));
+  }catch(e){ if(manual) toast('检测失败：' + e.message); }
+}
+/* ===================== 查询历史（只读） ===================== */
+async function openHistory(){
+  let r;
+  try{
+    r = await fetch('/api/gdfe/history',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ server: 'real', sid: (WIZ && WIZ.sid) || '', status: 1 })}).then(x=>x.json());
+  }catch(e){ return toast('查询失败：' + e.message); }
+  if(!r || !r.ok) return toast('查询失败：' + ((r && r.error) || '未知错误'));
+  const pad = n => (n < 10 ? '0' : '') + n;
+  const fmtSec = s => { s = Math.max(0, Math.round(s || 0)); return pad(Math.floor(s/60)) + ':' + pad(s % 60); };
+  const fmtPace = (km, sec) => { if(!(km > 0) || !(sec > 0)) return '\u2014'; const p = sec / km;
+    return pad(Math.floor(p/60)) + "'" + pad(Math.round(p % 60)) + '"'; };
+  const rows = (r.records || []).map(x=>{
+    const km = parseFloat(x.sportRange || 0) || 0, sec = parseFloat(x.sportTime || 0) || 0;
+    const bad = String(x.status) !== '1';
+    return '<div class="hRow' + (bad ? ' bad' : '') + '">'
+      + '<span class="hDay">' + (x.day || '\u2014') + '</span>'
+      + '<span class="hKm">' + km.toFixed(3) + ' km</span>'
+      + '<span class="hTime">' + fmtSec(sec) + '</span>'
+      + '<span class="hPace">' + fmtPace(km, sec) + ' /km</span>'
+      + '<span class="hPill">' + (x.remark || (bad ? '未达标' : '合格')) + '</span></div>';
+  }).join('') || '<div class="hSum">没有查到记录。</div>';
+  const months = (r.dates || []).filter(d=> d && ((+d.count || 0) > 0 || (parseFloat(d.totalRange || 0) || 0) > 0));
+  const mHtml = months.length ? '<div class="hMonth">' + months.map(d=>
+      '<span>' + (d.date || '') + '：' + (d.count || 0) + ' 次 / ' + (parseFloat(d.totalRange || 0) || 0).toFixed(2) + ' km</span>'
+    ).join('') + '</div>' : '';
+  const tr = (r.totalRange != null) ? (parseFloat(r.totalRange) || 0).toFixed(2) : '';
+  const ov = document.createElement('div'); ov.id = 'histOv';
+  ov.innerHTML = '<div class="hCard"><h2>历史跑步记录 <span class="pill">' + (r.count || 0) + ' 条</span></h2>'
+    + mHtml
+    + '<div class="hRow" style="color:var(--muted);border-bottom:1px solid var(--line)">'
+    + '<span class="hDay">日期</span><span class="hKm">距离</span><span class="hTime">时长</span>'
+    + '<span class="hPace">配速</span><span class="hPill">判定</span></div>'
+    + rows
+    + '<div class="hSum">' + (tr ? '合计 ' + tr + ' km\u3000\u00b7\u3000' : '') + '只读（不生成、不上传、不写记录）</div>'
+    + '<div class="btns" style="margin-top:12px"><button id="histClose" class="primary" style="width:100%">关闭</button></div></div>';
+  document.body.appendChild(ov);
+  const close = ()=>{ try{ ov.remove(); }catch(e){} };
+  ov.querySelector('#histClose').onclick = close;
+  ov.onclick = e => { if(e.target === ov) close(); };
+}
+/* 记住 / 恢复账号信息（不存密码）*/
+function rememberAccount(){
+  try{ const u = $('#uname') ? $('#uname').value.trim() : '';
+    const s = (typeof schPick === 'function') ? schPick() : '';
+    if(u) localStorage.setItem('route_studio.lastUser', u);
+    if(s) localStorage.setItem('route_studio.lastSchool', s); }catch(e){}
+}
+function restoreAccount(){
+  try{ const u = localStorage.getItem('route_studio.lastUser');
+    if(u && $('#uname') && !$('#uname').value) $('#uname').value = u; }catch(e){}
+}
+/* 「记住密码」：勾了 = 账号密码存本机（~/.gdfe_run_creds.json，明文仅本机）；取消勾选即删。 */
+function rememberPwdOn(){ const el = $('#rememberPwd'); return !!(el && el.checked); }
+function syncRemTag(){ const t = $('#remTag'); if(t) t.textContent = rememberPwdOn() ? '已记住' : '未记住'; }
+async function saveCreds(){
+  try{
+    const u = $('#uname') ? $('#uname').value.trim() : '';
+    const p = $('#upwd') ? $('#upwd').value : '';
+    if(!u && !p) return;
+    await fetch('/api/creds',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username:u,password:p})});
+  }catch(e){}
+  syncRemTag();
+}
+async function clearCreds(){
+  try{ await fetch('/api/creds',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:'clear'})}); }catch(e){}
+  syncRemTag();
+}
+async function loadRemembered(){
+  try{ const r = await fetch('/api/creds').then(x=>x.json());
+    if(r && r.saved && (r.username || r.password)){
+      if($('#uname') && r.username) $('#uname').value = r.username;
+      if($('#upwd') && r.password) $('#upwd').value = r.password;
+      if($('#rememberPwd')) $('#rememberPwd').checked = true;
+    }
+  }catch(e){}
+  syncRemTag();
+}
+if($('#rememberPwd')) $('#rememberPwd').onchange = ()=>{ if(rememberPwdOn()) saveCreds(); else clearCreds(); };
+let pts = [];                       // [{lat,lng}]
+let hist = [], future = [];         // 撤销/重做栈（JSON 快照）
+let mode = 'add';
+let markers = [], line = null, genLine = null, faceMarks = [];
+const drawLayer = L.layerGroup().addTo(map);
+
+/* 每次改动前先存快照；撤销/重做就是在这两个栈之间搬 */
+function pushHist(){ hist.push(JSON.stringify(pts)); if(hist.length>80) hist.shift(); future=[]; }
+function undoStep(){ if(!hist.length) return toast('没有可撤销的'); future.push(JSON.stringify(pts)); pts=JSON.parse(hist.pop()); resetSel(); redraw(); }
+function redoStep(){ if(!future.length) return toast('没有可重做的'); hist.push(JSON.stringify(pts)); pts=JSON.parse(future.pop()); resetSel(); redraw(); }
+
+function redraw(){
+  if(line){ map.removeLayer(line); line = null; }     /* 手绘时线是直接挂在 map 上的，先清掉避免重影 */
+  drawLayer.clearLayers();
+  markers = [];
+  pts.forEach((p,i)=>{
+    const m = toMap(p);
+    const mk = L.marker([m.lat,m.lng],{draggable: mode!=='move',icon:L.divIcon({className:'',html:'<div class="wpt"></div>',iconSize:[12,12]})})
+      .on('dragstart', ()=>pushHist())
+      .on('dragend', e=>{ pts[i] = fromMap(e.target.getLatLng()); redraw(); })
+      .on('contextmenu', ()=>{ pushHist(); pts.splice(i,1); redraw(); });
+    mk.addTo(drawLayer); markers.push(mk);
+  });
+  if(pts.length>1){ line = L.polyline(pts.map(p=>{ const m=toMap(p); return [m.lat,m.lng]; }),
+    {color:'#4c8dff',weight:4,opacity:.9}).addTo(drawLayer); }
+  updateStats();
+  updateOffset();          /* 读数的唯一刷新点：生成/方向键/撤销/清空都会经过 redraw() */
+  updateRotHandle();       /* 旋转手柄/角度的唯一刷新点：一律经过 redraw()，避免静默过期 */
+  updateRzHandles();       /* 拉缩手柄：同样只在 redraw() 里刷新（与旋转手柄同一条铁律） */
+  updateConfirmUI();       /* 「确认」状态：已确认 / 未确认（已改动）—— pts 变了自动作废 */
+  syncVertexDrag();        /* 整条优先：移动模式 / 已确认线路 ⇒ 顶点不可单独拖 */
+  checkLoop();
+}
+
+/* 手绘时每次 mousemove 都算一遍读数（含自交判定）太亏；节流到 120 ms 一帧。
+   注：自交判定已换成网格粗筛（geo.js），本身就快了 ~13 倍，这里是第二道保险。 */
+let statTimer = null;
+function scheduleStats(){
+  if(statTimer) return;
+  statTimer = setTimeout(()=>{ statTimer=null; updateStats(); }, 120);
+}
+
+/* 实时几何读数：长度 / 闭合误差 / 自交 / 当前缩放下的采点间距 */
+function updateStats(){
+  const len = pathLen(pts);
+  $('#nPts').textContent = pts.length;
+  $('#lenP').textContent = fmtLen(len);
+  const gap = pts.length>2 ? hav(pts[0], pts[pts.length-1]) : null;
+  $('#gapP').textContent = gap==null ? '—' : fmtLen(gap);
+  $('#selfP').textContent = (pts.length>3 && GEO.selfIntersects(pts, isRing())) ? '是' : '否';
+  const z = map.getZoom();
+  const lat = pts.length ? pts[0].lat : 23.2;
+  $('#spP').textContent = GEO.sampleSpacing(lat, z, 0.3, 5.0).toFixed(2)+' m';
+}
+function checkLoop(){
+  const closed = pts.length>2 && hav(pts[0],pts[pts.length-1])<30;
+  $('#pill').textContent = pts.length? (pts.length+' 点 · '+(closed?'环线':'开放')) : '就绪';
+}
+
+/* ============================ 整体平移（对齐操场用） ============================ */
+/* 生成出来的轨迹默认落在地图中心，手动对齐靠「整条一起挪」，而不是逐点拖。
+   两种手法：移动模式下按住轨迹拖；方向键按「微调步长」推（Shift ×5）。
+   平移一律在**底图坐标系**里做（toMap → 加偏移 → fromMap），所以屏幕上挪多少就是多少。 */
+let anchor = null;                                   /* 平移基准（生成/导入/清空时重置），用来显示累计偏移 */
+let moving = false, mvStart = null, mvOrig = null, mvOff = null, moveDirty = false;
+
+const cosLat = lat => Math.cos(lat*Math.PI/180);
+function setAnchor(ps){ anchor = (ps || pts).map(p=>({lat:p.lat, lng:p.lng})); resetSel(); }
+function updateOffset(){
+  const el = $('#offP'); if(!el) return;
+  if(!anchor || !pts.length){ el.textContent = '—'; return; }
+  const lat = anchor[0].lat;
+  const dE = (pts[0].lng - anchor[0].lng) * 111320.0 * cosLat(lat);
+  const dN = (pts[0].lat - anchor[0].lat) * 111320.0;
+  el.textContent = (Math.abs(dE)<0.05 && Math.abs(dN)<0.05) ? '0 m'
+    : ('东 '+dE.toFixed(1)+' / 北 '+dN.toFixed(1)+' m');
+}
+/* 在底图坐标系里给每个点加同一个偏移（每点各算一次、不累加 ⇒ 无累积误差） */
+function shiftAllMap(dLat, dLng){
+  pts = pts.map(p=>{ const m = toMap(p); return fromMap({lat:m.lat+dLat, lng:m.lng+dLng}); });
+}
+function nudgeMeters(dE, dN){
+  if(!pts.length) return;
+  const lat = pts[0].lat;
+  shiftAllMap(dN/111320.0, dE/(111320.0*cosLat(lat)));
+}
+/* 屏幕空间「点到线段」距离：决定按在哪里才算「按在轨迹上」（否则让地图正常拖动） */
+function ptSegPx(p, a, b){
+  const vx=b.x-a.x, vy=b.y-a.y, L2=vx*vx+vy*vy;
+  let t = L2 ? ((p.x-a.x)*vx + (p.y-a.y)*vy)/L2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  const dx=p.x-(a.x+t*vx), dy=p.y-(a.y+t*vy);
+  return Math.sqrt(dx*dx+dy*dy);
+}
+function nearPath(latlng, px){
+  if(!pts.length) return false;
+  const P = map.latLngToContainerPoint(latlng);
+  const C = pts.map(q=>{ const m=toMap(q); return map.latLngToContainerPoint([m.lat,m.lng]); });
+  if(C.length===1) return P.distanceTo(C[0]) <= px;
+  for(let i=0;i<C.length-1;i++){ if(ptSegPx(P,C[i],C[i+1])<=px) return true; }
+  if(isRing() && ptSegPx(P,C[C.length-1],C[0])<=px) return true;
+  return false;
+}
+/* 轻量重绘：拖动中只挪已有图层、不重建（几百个点也能跟手）；rAF 合并同帧多次 mousemove */
+let mvRaf = null;
+function drawMoving(){
+  if(mvRaf) return;
+  mvRaf = requestAnimationFrame(()=>{ mvRaf = null;
+    const drawn = pts.map(p=>{ const m=toMap(p); return [m.lat,m.lng]; });
+    if(line) line.setLatLngs(drawn);
+    markers.forEach((mk,i)=>{ if(drawn[i]) mk.setLatLng(drawn[i]); });
+    updateOffset(); scheduleStats();
+  });
+}
+function startMove(latlng){
+  moving = true; mvStart = latlng; mvOff = { dE:0, dN:0 };
+  mvOrig = pts.map(p=>({lat:p.lat, lng:p.lng}));
+  moveDirty = false;                     /* 真的动了才记历史：纯点击（左键点选轨迹）不留空撤销步 */
+  map.dragging.disable();
+}
+function doMove(latlng){
+  if(!moveDirty){ pushHist(); moveDirty = true; }      /* 一次拖动 = 一步撤销 */
+  const dLat = latlng.lat - mvStart.lat, dLng = latlng.lng - mvStart.lng;
+  pts = mvOrig.map(p=>{ const m=toMap(p); return fromMap({lat:m.lat+dLat, lng:m.lng+dLng}); });
+  const lat = mvOrig[0].lat;
+  mvOff = { dE: dLng*111320.0*cosLat(lat), dN: dLat*111320.0 };
+  drawMoving();
+}
+function endMove(){
+  if(!moving) return;
+  moving = false; map.dragging.enable();
+  redraw();
+  if(mvOff && (Math.abs(mvOff.dE)>0.05 || Math.abs(mvOff.dN)>0.05)){
+    toast('整体平移 东 '+mvOff.dE.toFixed(1)+' m / 北 '+mvOff.dN.toFixed(1)+' m（Ctrl+Z 可撤销）');
+  }
+  mvOff = null;
+}
+
+/* ============================ 选中整条 / 绕中心旋转 ============================ */
+/* 旋转同样在**底图坐标系**里做：经度按 cosLat 折算成米→得到局部等距平面→真旋转→换算回去。
+   这样屏幕上转多少度就是多少度，不会被 GCJ 偏移或纬度收缩带歪。 */
+let sel = false, rotMark = null, rotDrag = null, rotAcc = 0;
+function rotCenterMap(){
+  if(!pts.length) return null;
+  let la=0, lo=0;
+  pts.forEach(p=>{ const m=toMap(p); la+=m.lat; lo+=m.lng; });
+  return { lat: la/pts.length, lng: lo/pts.length };
+}
+function rotatePoints(orig, c, deg){
+  const a=deg*Math.PI/180, ca=Math.cos(a), sa=Math.sin(a);
+  const kx=111320.0*cosLat(c.lat), ky=111320.0;
+  return orig.map(p=>{ const m=toMap(p);
+    const x=(m.lng-c.lng)*kx, y=(m.lat-c.lat)*ky;      /* 局部米坐标（y 向北为正） */
+    return fromMap({ lat: c.lat+(x*sa+y*ca)/ky, lng: c.lng+(x*ca-y*sa)/kx }); });   /* +deg = 逆时针 */
+}
+function rotateBy(deg){
+  if(pts.length<2) return false;
+  const c = rotCenterMap(); if(!c) return false;
+  pts = rotatePoints(pts, c, deg); rotAcc += deg;
+  return true;
+}
+function angOf(c, ll){ return Math.atan2(ll.lat-c.lat, (ll.lng-c.lng)*cosLat(c.lat)); }
+function resetSel(){ sel=false; rotAcc=0; if(rotMark){ map.removeLayer(rotMark); rotMark=null; } rzClear();
+  const el=$('#rotP'); if(el) el.textContent='0°'; }
+/* 手柄放在轨迹上方 36 px 处；位置只由 redraw() 统一刷新 */
+function updateRotHandle(){
+  const el=$('#rotP'); if(el) el.textContent = (rotAcc ? rotAcc.toFixed(1) : '0')+'°';
+  if(!sel || pts.length<2){ if(rotMark){ map.removeLayer(rotMark); rotMark=null; } return; }
+  const c = rotCenterMap();
+  const cc = map.latLngToContainerPoint([c.lat,c.lng]);
+  let minY = Infinity;
+  pts.forEach(p=>{ const m=toMap(p); const q=map.latLngToContainerPoint([m.lat,m.lng]); if(q.y<minY) minY=q.y; });
+  const at = map.containerPointToLatLng(L.point(cc.x, Math.min(minY, cc.y) - 36));
+  if(!rotMark){
+    rotMark = L.marker(at,{draggable:true, zIndexOffset:900,
+        icon:L.divIcon({className:'',html:'<div class="rh">↻</div>',iconSize:[26,26],iconAnchor:[13,13]})})
+      .on('dragstart', ()=>{ if(pts.length<2) return;
+        const c = rotCenterMap();          /* 基准必取「按下那一瞬」的角度：首次 drag 事件时 marker 已被挪了一段，会少报 */
+        rotDrag = { c, base: pts.map(p=>({lat:p.lat,lng:p.lng})), a0: angOf(c, rotMark.getLatLng()), last:0 };
+        pushHist(); })                       /* 一次拖动 = 一步撤销 */
+      .on('drag', e=>{ if(!rotDrag) return;
+        const a = angOf(rotDrag.c, e.target.getLatLng());
+        if(rotDrag.a0==null) rotDrag.a0 = a;
+        let d = (a - rotDrag.a0)*180/Math.PI;
+        while(d - rotDrag.last >  180) d -= 360;   /* 跨 ±180 不跳变 */
+        while(d - rotDrag.last < -180) d += 360;
+        rotDrag.last = d; rotAcc = d;
+        pts = rotatePoints(rotDrag.base, rotDrag.c, d);
+        drawMoving();
+      })
+      .on('dragend', ()=>{ if(!rotDrag) return; const d = rotAcc; rotDrag=null; redraw();
+        if(Math.abs(d)>0.05) toast('已旋转 '+d.toFixed(1)+'°（Ctrl+Z 可撤销）'); })
+      .addTo(map);
+  } else { rotMark.setLatLng(at); }
+}
+
+/* ============================ 拉缩整条（XY 自由 / 对角线等比例） ============================ */
+/* 选中整条后，轨迹外接框上长出 8 个小方块：拖四边 = 单轴自由拉缩（xy），拖四角 = 对角线等比例。
+   和旋转/平移同一条铁律：一律在**底图坐标系**里算（经度按 cosLat 折成米），屏幕上拉多少就是多少。
+   手柄放在框外 12 px：好看，也避免与顶点抢「按下」。 */
+const RZ_OFF = 12;
+const RZ_DEFS = [
+  { k:'nw', fx:0,   fy:0,   u:true  }, { k:'n', fx:.5, fy:0,   u:false }, { k:'ne', fx:1,   fy:0,   u:true  },
+  { k:'w',  fx:0,   fy:.5,  u:false },                                      { k:'e',  fx:1,   fy:.5,  u:false },
+  { k:'sw', fx:0,   fy:1,   u:true  }, { k:'s', fx:.5, fy:1,   u:false }, { k:'se', fx:1,   fy:1,   u:true  },
+];
+const RZ_OPP = { nw:'se', n:'s', ne:'sw', w:'e', e:'w', sw:'ne', s:'n', se:'nw' };
+const RZ_CUR = { nw:'nwse-resize', se:'nwse-resize', ne:'nesw-resize', sw:'nesw-resize',
+                 n:'ns-resize', s:'ns-resize', w:'ew-resize', e:'ew-resize' };
+let rzHandles = [], rz = null;
+/* 轨迹在屏幕上的外接框（容器像素）—— 拉缩手柄和「对角线」全靠它定位 */
+function shapeBBox(){
+  if(!pts.length) return null;
+  let x0=Infinity, y0=Infinity, x1=-Infinity, y1=-Infinity;
+  pts.forEach(p=>{ const m=toMap(p); const q=map.latLngToContainerPoint([m.lat,m.lng]);
+    if(q.x<x0)x0=q.x; if(q.x>x1)x1=q.x; if(q.y<y0)y0=q.y; if(q.y>y1)y1=q.y; });
+  return { x0, y0, x1, y1, w:x1-x0, h:y1-y0, cx:(x0+x1)/2, cy:(y0+y1)/2 };
+}
+function rzHandlePx(def, bb){
+  const ox = (def.fx===0 ? -1 : def.fx===1 ? 1 : 0) * RZ_OFF;      /* 往外挪一点，别压着顶点 */
+  const oy = (def.fy===0 ? -1 : def.fy===1 ? 1 : 0) * RZ_OFF;
+  return L.point(bb.x0 + bb.w*def.fx + ox, bb.y0 + bb.h*def.fy + oy);
+}
+/* 缩放比：定点 = 对面那个手柄。四边只动一个轴（另一轴恒 1）；四角把位移投影到初始对角线 ⇒ 等比例。
+   注意四角那两个分母：不是「长度之比」而是「投影」，所以沿对角线拉才变、横向推不变（手感更稳）。 */
+function scaleFactors(uniform, anchorPx, startPx, curPx){
+  const dx0 = startPx.x - anchorPx.x, dy0 = startPx.y - anchorPx.y;
+  const dx1 = curPx.x   - anchorPx.x, dy1 = curPx.y   - anchorPx.y;
+  if(uniform){
+    const L2 = dx0*dx0 + dy0*dy0;
+    const s = L2 > 1e-6 ? (dx1*dx0 + dy1*dy0)/L2 : 1;
+    return { sx:s, sy:s };
+  }
+  return { sx: Math.abs(dx0) > 1e-6 ? dx1/dx0 : 1, sy: Math.abs(dy0) > 1e-6 ? dy1/dy0 : 1 };
+}
+/* 以 anchorPx 为定点把 orig 缩放 (sx,sy)：base 存在图上、乘法在米平面 ⇒ 反复拖不漂 */
+function scalePointsAbout(orig, anchorPx, sx, sy){
+  /* 定点 = 屏幕上对面那个手柄（从底图坐标反算回 WGS）。缩放按经纬度轴做：
+     经度 ×sx、纬度 ×sy —— 手柄本来就落在正东西/正南北方向上，所以屏幕上拉多少就是多少。 */
+  const a = fromMap(map.containerPointToLatLng(L.point(anchorPx.x, anchorPx.y)));
+  return orig.map(p=>({ lat: a.lat + (p.lat - a.lat)*sy, lng: a.lng + (p.lng - a.lng)*sx }));
+}
+function rzClear(){ rzHandles.forEach(m=>map.removeLayer(m)); rzHandles = []; rz = null; }
+function rzBegin(def){
+  if(pts.length < 2) return;
+  const bb = shapeBBox(); if(!bb) return;
+  const other = RZ_DEFS.filter(d=>d.k === RZ_OPP[def.k])[0]; if(!other) return;
+  const anchorPx = rzHandlePx(other, bb), startPx = rzHandlePx(def, bb);
+  rz = { key:def.k, uniform:def.u, base: pts.map(p=>({lat:p.lat, lng:p.lng})), anchorPx, startPx, last:null };
+  pushHist();                      /* 一次拉缩 = 一步撤销 */
+}
+function rzDrag(curPx){
+  if(!rz) return;
+  const f = scaleFactors(rz.uniform, rz.anchorPx, rz.startPx, curPx);
+  const sx = Math.max(0.05, Math.min(20, f.sx)), sy = Math.max(0.05, Math.min(20, f.sy));
+  pts = scalePointsAbout(rz.base, rz.anchorPx, sx, sy);
+  rz.last = { sx, sy };
+  drawMoving();                    /* 拖动中只挪图层，不重建（和整条平移同一套） */
+}
+function rzEnd(){
+  if(!rz) return;
+  const l = rz.last; rz = null; redraw();
+  if(l && (Math.abs(l.sx-1) > 1e-3 || Math.abs(l.sy-1) > 1e-3)){
+    toast('已拉缩 ×'+l.sx.toFixed(3)+' / ×'+l.sy.toFixed(3)+'（Ctrl+Z 可撤销）');
+  }
+}
+/* 8 个手柄跟旋转手柄一样：位置只由 redraw() 统一刷新 */
+function updateRzHandles(){
+  if(!sel || pts.length < 2){ if(rzHandles.length) rzClear(); return; }
+  const bb = shapeBBox(); if(!bb){ if(rzHandles.length) rzClear(); return; }
+  RZ_DEFS.forEach((def, i)=>{
+    const at = map.containerPointToLatLng(rzHandlePx(def, bb));
+    if(!rzHandles[i]){
+      rzHandles[i] = L.marker(at, { draggable:true, zIndexOffset:850,
+        icon: L.divIcon({ className:'rzh rzh-'+def.k,
+          html:'<div class="rz" style="cursor:'+RZ_CUR[def.k]+'"></div>',
+          iconSize:[11,11], iconAnchor:[6,6] }) })
+        .on('dragstart', ()=>{ rzBegin(def); })
+        .on('drag', e=>{ rzDrag(map.latLngToContainerPoint(e.target.getLatLng())); })
+        .on('dragend', ()=>{ rzEnd(); })
+        .addTo(map);
+    } else { rzHandles[i].setLatLng(at); }
+  });
+}
+
+/* 点击加点 / 点选整条：左键点轨迹=选中，点空白=取消选中（已确认未保存时会问要不要保存） */
+map.on('click', e=>{
+  if(mode==='add'){ dropConfirmedForNew(); pushHist(); pts.push(fromMap(e.latlng)); redraw(); return; }
+  const onTrack = pts.length>1 && nearPath(e.latlng, 18);
+  if((confirmed || mode==='move') && onTrack) return selectRoute();
+  if(sel) return deselectRoute();
+});
+
+/* 自由手绘（采点间距按缩放自适应：放大就采得更密）/ 移动整条（按住轨迹拖） */
+let drawing=false, lastDraw=null;
+map.on('mousedown', e=>{
+  /* 按在手柄上就交给手柄自己：拉缩方块离轨迹只有 12 px，落在 nearPath 的 18 px 判定里，
+     不拦住的话 move 模式会「一边拉缩一边整条平移」（两笔历史 + 位置算错）。 */
+  const ht = e.originalEvent && e.originalEvent.target;
+  if(ht && ht.closest && ht.closest('.rh, .rzh')) return;
+  /* 「拖地图」模式 = 纯平移：左键按下直接交给 Leaflet —— **不 disable 地图拖动、也不画点**。
+     单纯点一下轨迹仍能选中：这一次没禁用地图拖动，DOM click 照常送到 map.on('click')。 */
+  if(mode==='pan') return;
+  /* 任何模式下按住 Alt 拖 = 临时平移（「自由手绘」里想挪地图不用先切模式；中键拖也行，Leaflet 原生支持） */
+  if(e.originalEvent && e.originalEvent.altKey) return;
+  const onTrack = pts.length>1 && nearPath(e.latlng, 18);
+  /* 左键点轨迹 = 直接选中 + 整条拖动（原来「选中整条」按钮的下岗路线）。
+     已确认的线路在任何模式下都算；「移动整条」模式下也算（hint 里承诺的「点一下轨迹」）。
+     ⚠ 必须在这一步就选中：按下时 startMove 会 map.dragging.disable()，而**一旦在这次按下里
+     禁用了地图拖动，紧随其后的 DOM click 就不会再送到地图上**（2026-09-23 实测：click 完全不触发）。
+     所以「点轨迹选中」不能只挂 map.on('click') —— 移动模式下那样点会毫无反应（静默失效）。 */
+  if((confirmed || mode==='move') && onTrack && mode!=='add'){ if(!sel){ sel = true; rotAcc = 0; redraw(); } startMove(e.latlng); return; }
+  if(mode==='move'){ if(onTrack) startMove(e.latlng); return; }   /* 没按在轨迹上 ⇒ 交给地图拖动 */
+  if(mode!=='free') return;
+  /* 选中的整条正被「点空白取消选择」接管：先别急着画新的（否则会把已确认的整条擦掉） */
+  if(sel && !onTrack) return;
+  dropConfirmedForNew();          /* 开新的一条：先把上一条已确认的清掉并提醒 */
+  drawing=true; lastDraw=null; pushHist(); map.dragging.disable(); addFree(e.latlng);
+});
+map.on('mousemove', e=>{ if(moving) return doMove(e.latlng); if(!drawing) return; addFree(e.latlng); });
+map.on('mouseup', ()=>{ if(moving) return endMove();
+  if(drawing){ drawing=false; map.dragging.enable(); updateStats(); redraw(); } });
+/* 拖出地图再松手也要收尾（否则 map.dragging 会一直禁着） */
+document.addEventListener('mouseup', ()=>{ if(moving) endMove(); });
+map.on('zoomend', ()=>{ if(pts.length) updateStats(); });
+function addFree(ll){
+  const p = fromMap(ll);
+  const step = GEO.sampleSpacing(p.lat, map.getZoom(), 0.3, 5.0);
+  if(lastDraw && hav(lastDraw,p)<step) return;     // 间距随缩放变
+  pts.push(p); lastDraw=p;
+  const drawn = pts.map(q=>{ const m=toMap(q); return [m.lat,m.lng]; });
+  if(pts.length>1){
+    if(line) line.setLatLngs(drawn);               /* 增量更新，不重建整条线 */
+    else line = L.polyline(drawn,{color:'#4c8dff',weight:4,opacity:.9}).addTo(map);
+  }
+  scheduleStats();
+}
+
+/* 整条优先：只有「自由加减点」时才允许单点拖动；移动模式、或线路已确认（定稿）时整条优先。
+   否则按在顶点上会「单个点被 Leaflet 拖走」+「整条一起挪」同时发生（撤销栈两条）。 */
+function syncVertexDrag(){
+  markers.forEach(mk=>{ if(mk.dragging) ((mode==='move' || mode==='pan' || confirmed) ? mk.dragging.disable() : mk.dragging.enable()); });
+  /* ↑ 「拖地图」也算整条优先：否则按在地图上那个小方块上会变成「拖那个顶点」而不是平移地图 */
+}
+/* 模式切换 */
+function setMode(m){ mode=m;
+  $('#mAdd').classList.toggle('on',m==='add'); $('#mFree').classList.toggle('on',m==='free');
+  if($('#mMove')) $('#mMove').classList.toggle('on',m==='move');
+  if($('#mPan')) $('#mPan').classList.toggle('on',m==='pan');
+  map.getContainer().style.cursor = (m==='free') ? 'crosshair' : (m==='move' ? 'move' : (m==='pan' ? 'grab' : ''));
+  if(m!=='free'){ drawing=false; }
+  if(m!=='move'){ moving=false; }
+  /* 移动整条时顶点不可单独拖：否则按在顶点上会「单个点被 Leaflet 拖走」+「整条一起挪」
+     同时发生（撤销栈被塞两条，一次拖动要按两次 Ctrl+Z）。整条优先。 */
+  syncVertexDrag();
+  map.dragging.enable();
+}
+$('#mAdd').onclick=()=>setMode('add');
+if($('#mPan')) $('#mPan').onclick=()=>{ setMode('pan'); toast('拖地图：按住左键拖 = 平移地图（要画线先点「自由手绘」）'); };
+$('#mFree').onclick=()=>{ setMode('free'); toast('自由手绘：按住左键拖动画线（想挪地图：按住 Alt 拖，或点「拖地图」）'); };
+if($('#mMove')) $('#mMove').onclick=()=>{ if(!pts.length) return toast('先画线或先生成跑道'); setMode('move');
+  toast('移动整条：按住轨迹拖到位；方向键按「微调步长」推（Shift ×5）'); };
+$('#bUndo').onclick=undoStep;
+$('#bRedo').onclick=redoStep;
+/* 插中点：把最长的一段对半剖开（手绘太疏时补点） */
+$('#bMid').onclick=()=>{ if(pts.length<2) return toast('至少两个点');
+  const closed = isRing(); const i = GEO.longestSegmentIndex(pts, closed);
+  if(i<0) return; pushHist();
+  const a = i>=pts.length ? pts[pts.length-1] : pts[i-1];
+  const b = i>=pts.length ? pts[0] : pts[i];
+  const mid = {lat:(a.lat+b.lat)/2, lng:(a.lng+b.lng)/2};
+  if(i>=pts.length) pts.push(mid); else pts.splice(i,0,mid);
+  redraw(); toast('已插中点（最长段 '+Math.round(hav(a,b))+' m）'); };
+/* 平滑去抖：滑动平均（窗口 3），端点不动。看图不满意就 Ctrl+Z。 */
+$('#bSmooth').onclick=()=>{ if(pts.length<4) return toast('点太少，不需要平滑');
+  const before = pathLen(pts); pushHist();
+  pts = GEO.smoothMovingAverage(pts, 3, isRing()); redraw();
+  toast('已平滑 · 长度 '+fmtLen(before)+' → '+fmtLen(pathLen(pts))); };
+/* 整理路径：按所选模式（普通/平滑/拟合）改写折线，可撤销 */
+$('#bTidy').onclick=()=>{ if(pts.length<2) return toast('先画线');
+  const mode=$('#fitMode').value, stepM=+$('#rst').value||1.0;
+  const n0=pts.length, l0=pathLen(pts);
+  pushHist();
+  const r = GEO.fitPath(pts, {mode, stepM, closed:isRing()});
+  pts = r.points; redraw();
+  toast(mode+' · '+n0+' → '+pts.length+' 点 · '+fmtLen(l0)+' → '+fmtLen(pathLen(pts))); };
+function clearRoute(){ pushHist(); pts=[]; anchor=null; resetSel(); drawLayer.clearLayers(); if(genLine){map.removeLayer(genLine);genLine=null;}
+  faceMarks.forEach(m=>map.removeLayer(m)); faceMarks=[]; redraw(); $('#resultBox').innerHTML=''; }
+$('#bClear').onclick = clearRoute;
+$('#bFit').onclick=()=>{ if(pts.length){ map.fitBounds(L.latLngBounds(pts.map(p=>{const m=toMap(p); return [m.lat,m.lng];})).pad(0.2)); }
+  else { const c = toMap({lat:23.1994,lng:113.2790}); map.setView([c.lat,c.lng],15); } };
+
+$('#bRotL').onclick=()=>{ if(pts.length<2) return toast('先画线或先生成跑道');
+  const st=(parseFloat($('#rstep').value)||15); pushHist(); rotateBy(st); sel=true; redraw();
+  toast('逆时针 '+st.toFixed(1)+'°（Ctrl+Z 可撤销）'); };
+$('#bRotR').onclick=()=>{ if(pts.length<2) return toast('先画线或先生成跑道');
+  const st=(parseFloat($('#rstep').value)||15); pushHist(); rotateBy(-st); sel=true; redraw();
+  toast('顺时针 '+st.toFixed(1)+'°（Ctrl+Z 可撤销）'); };
+
+/* ============================ 「确认这条线路」（保证只有一条完整线路） ============================ */
+/* 确认 = 把当前这条定稿。之后再「开新的一条」（点地图加点 / 自由手绘 / 生成跑道 / 载入 / 导入 GPX /
+   结果→可编辑）会先把上一条清掉并提醒；对已确认线路做任何改动（平移 / 旋转 / 拉缩 / 整理 / 撤销…）
+   则让「确认」自动作废 —— 靠跟快照比，不用在十几个操作里逐个插桩，漏一个也不会撒谎。 */
+let confirmed = false, confirmSnapshot = '', confirmDirty = false, confirmedUnsaved = false;
+function updateConfirmUI(){
+  if(confirmed && JSON.stringify(pts) !== confirmSnapshot){ confirmed = false; confirmDirty = true; }
+  const el = $('#confirmState'); if(!el) return;
+  if(confirmed) el.textContent = '已确认 · '+pts.length+' 点 / '+fmtLen(pathLen(pts));
+  else if(confirmDirty && pts.length >= 2) el.textContent = '未确认（已改动，需重新确认）';
+  else el.textContent = pts.length >= 2 ? '未确认' : '—';
+  const b = $('#bConfirm'); if(b) b.classList.toggle('on', confirmed);
+}
+function confirmRoute(){
+  if(pts.length < 2) return toast('先画线或先生成跑道，再确认');
+  /* 确认即自动连接首尾：精简版一律补回起点；完整版看「自动连接首尾」勾选 */
+  if((UI.simple() || ($('#autoClose') && $('#autoClose').checked)) && pts.length > 1 && !isRing()){
+    pushHist(); pts = pts.concat([{ lat:pts[0].lat, lng:pts[0].lng }]); redraw();
+  }
+  confirmed = true; confirmDirty = false; confirmedUnsaved = true; confirmSnapshot = JSON.stringify(pts);
+  sel = true; rotAcc = 0;                    /* 确认即选中：左键直接可拖，不用再点「选中整条」 */
+  /* 手绘线路：确认后就不能继续画了（收手绘 + 退出自由手绘模式；整条仍可拖动微调） */
+  if($('#useDraw') && $('#useDraw').checked){ $('#useDraw').checked = false; syncDraw(); }
+  if(mode === 'free') setMode('move');
+  redraw(); updateConfirmUI();
+  toast('已确认这条线路（'+pts.length+' 点 / '+fmtLen(pathLen(pts))+'）：左键点它选中拖动，点空白处会问你要不要保存', 4600);
+}
+/* 开新的一条之前的守卫：把上一条已确认的整条清掉并提醒 */
+function dropConfirmedForNew(){
+  if(!confirmed) return false;
+  confirmed = false; confirmDirty = false; confirmedUnsaved = false; confirmSnapshot = '';
+  pts = []; anchor = null; resetSel();
+  drawLayer.clearLayers();
+  if(genLine){ map.removeLayer(genLine); genLine = null; }
+  faceMarks.forEach(m=>map.removeLayer(m)); faceMarks = [];
+  $('#resultBox').innerHTML = '';
+  updateConfirmUI();
+  toast('已清掉上一条已确认的线路（保证只有一条完整线路）', 3800);
+  return true;
+}
+/* 选中 / 取消选中：原来那两个按钮（选中整条 / 取消选择）下岗了 ——
+   已确认的线路左键点一下就是选中；点空白处取消选中，顺便问一句「要不要保存」。 */
+function selectRoute(){
+  if(pts.length < 2 || sel) return;
+  sel = true; rotAcc = 0; redraw();
+  toast('已选中整条：按住轨迹拖动 · 拖 ↻ 旋转 · 拖 8 个小方块拉缩 · 点空白处取消');
+}
+function deselectRoute(){
+  if(!sel) return;
+  resetSel(); redraw();
+  toast('已取消选择（点轨迹可再选中）');
+  if(confirmed && confirmedUnsaved) askSaveConfirmed();
+}
+/* 保存当前画布上的轨迹（默认名可改）。「点空白处」和「保存当前轨迹…」按钮都走这里。 */
+function defaultTrackName(){
+  const d = new Date(), p2 = n => String(n).padStart(2,'0');
+  return '轨迹-' + d.getFullYear() + p2(d.getMonth()+1) + p2(d.getDate()) + '-' + p2(d.getHours()) + p2(d.getMinutes());
+}
+async function saveTrackNamed(name){
+  const r = await fetch('/api/routes/save',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name, points: pts, params: params()})}).then(x=>x.json());
+  if(!r.ok) return null;
+  confirmedUnsaved = false;                 /* 存下来了 ⇒ 不再「未保存」 */
+  if(r.id) setDefaultTrack(r.id);           /* 刚存的这条就是要跑的那条：顺手设为默认 */
+  await refreshTracks();
+  if(r.id){ $('#trackList').value = r.id; onTrackPick(); }
+  return r;
+}
+async function askSaveTrack(){
+  if(pts.length < 2) return toast('先画线或先生成跑道，再保存');
+  const name = prompt('保存这条轨迹，名字：', defaultTrackName());
+  if(!name) return;
+  const r = await saveTrackNamed(name);
+  toast(r ? ('已保存「'+name+'」· '+pts.length+' 点 / '+fmtLen(pathLen(pts))+' → 开跑栏里已选中')
+          : '保存失败', 3600);
+}
+/* 点空白处：已确认但还没保存，就问一句 */
+function askSaveConfirmed(){
+  if(!(confirmed && confirmedUnsaved)) return;
+  if(typeof confirm === 'function' && !confirm('这条线路已确认但还没保存，现在保存吗？')) return;
+  askSaveTrack();
+}
+$('#bConfirm').onclick = confirmRoute;
+
+/* 标准跑道：按 IAAF 尺寸生成体育场形闭合环 */
+/* 简单模式把三个「专业参数」收起（采点间距 2.0 m / 直道朝向 0°），起跑相位每跑一次随机。
+   这里强制取默认值，是为了「切回简单模式后残留的高级参数不会偷偷生效」。 */
+function simpleLane(){ return Math.max(1, +$('#lane').value||1); }
+function updateTrackBtn(){
+  const b = $('#bTrack'); if(!b) return;
+  b.textContent = UI.simple() ? '一键生成标准 400 m 跑道' : '生成跑道（地图中心）';
+}
+function trackParams(){
+  const s = UI.simple();
+  return {
+    headingDeg: s ? 0 : (+$('#head').value||0),
+    ccw: $('#dir').value==='ccw',
+    spacingM: s ? 2.0 : (+$('#tstep').value||2.0),
+    phaseDeg: s ? Math.round(Math.random()*3600)/10 : (+$('#phase').value||0),
+  };
+}
+function updateLapInfo(){
+  const lane = Math.max(1, +$('#lane').value||1);
+  const lap = GEO.trackLapLength(lane);
+  $('#lapP').textContent = lap.toFixed(2)+' m';
+  const tkm = +$('#tkm').value||0;
+  $('#lapN').textContent = tkm>0 ? GEO.trackLapCount(lane, tkm*1000).toFixed(2)+' 圈' : '—';
+}
+$('#lane').oninput = updateLapInfo;
+$('#tkm').oninput = updateLapInfo;
+$('#bTrack').onclick = ()=>{
+  if($('#useDraw') && $('#useDraw').checked){ $('#useDraw').checked = false; syncDraw(); }   /* 一键生成跑道 = 关掉手绘 */
+  dropConfirmedForNew();                   /* 开新的一条：先把上一条已确认的清掉并提醒 */
+  const c = fromMap(map.getCenter());      /* 地图取点：GCJ 底图要转回 WGS-84 */
+  const lane = simpleLane(), tp = trackParams();
+  pushHist();
+  pts = GEO.trackLoop({lat:c.lat, lng:c.lng, lane,
+    headingDeg: tp.headingDeg, ccw: tp.ccw,
+    spacingM: tp.spacingM, phaseDeg: tp.phaseDeg});
+  setAnchor();                             /* 从此刻起算「整体偏移」 */
+  setMode('move');                         /* 生成后直接可拖：按住轨迹挪，或方向键微调 */
+  sel = true; rotAcc = 0;                  /* 生成完默认选中整条：旋转手柄直接就位，不用再点一下 */
+  redraw();
+  toast('已生成第 '+lane+' 道 · 单圈 '+GEO.trackLapLength(lane).toFixed(1)+' m · '+pts.length+' 点 → 已选中整条：拖橙色 ↻ 手柄旋转，或按住轨迹整条拖动对齐');
+};
+
+/* ============================ 手绘线路（精简版：勾选后才可画） ============================ */
+function syncDraw(){
+  const on = !!($('#useDraw') && $('#useDraw').checked);
+  const t = $('#drawTools'); if(t) t.hidden = false;                       /* 工具常显 */
+  ['#bUndoL','#bClearL','#bConfirmL'].forEach(s=>{ const b=$(s); if(b) b.disabled = !on; });   /* 未勾选 = 灰色禁用 */
+  const tag = $('#drawTag'); if(tag) tag.textContent = on ? '开' : '关';
+}
+syncDraw();
+if($('#useDraw')) $('#useDraw').onchange = ()=>{
+  if($('#useDraw').checked){
+    clearRoute();                 /* 勾选后自动清空面板上已有的线路 */
+    setMode('free');
+    toast('手绘线路已开：在地图上按住左键拖动即可画线（想挪地图按住 Alt 拖）', 4200);
+  }else{
+    setMode('pan');
+  }
+  syncDraw();
+};
+if($('#bUndoL')) $('#bUndoL').onclick = ()=>undoStep();
+if($('#bClearL')) $('#bClearL').onclick = ()=>clearRoute();
+if($('#bConfirmL')) $('#bConfirmL').onclick = ()=>confirmRoute();
+
+/* ============================ 「方向」（顺 / 逆时针） ============================ */
+/* 让闭环轨迹的走向跟随侧栏选择：不符就翻转点序（首尾仍闭合）。非闭环不动。 */
+function ringSig(a){ let s = 0; for(let i=0;i<a.length-1;i++){ s += (a[i+1].lng-a[i].lng) * (a[i+1].lat+a[i].lat); } return s; }
+function ensureDir(a){
+  if(!a || a.length < 4) return a;
+  if(hav(a[0], a[a.length-1]) >= 30) return a;                      /* 与 isRing 同口径：非闭环不动 */
+  const wantCw = (($('#dir') && $('#dir').value) || 'cw') !== 'ccw';
+  if((ringSig(a) > 0) === wantCw) return a;
+  const m = a.length - 1, rev = [];
+  for(let i=0;i<m;i++) rev.push(a[m-1-i]);
+  rev.push({ lat: rev[0].lat, lng: rev[0].lng });
+  return rev;
+}
+if($('#dir')) $('#dir').onchange = ()=>{
+  const nm = $('#dir').selectedOptions[0] ? $('#dir').selectedOptions[0].textContent : $('#dir').value;
+  if(pts.length >= 4 && isRing()){
+    const n2 = ensureDir(pts);
+    if(n2 !== pts){ pushHist(); pts = n2; sel = true; redraw(); toast('已按「'+nm+'」调整轨迹走向', 3200); }
+    else toast('当前轨迹已是「'+nm+'」', 2400);
+  }
+};
+
+/* 键盘：方向键整体平移（步长取侧栏，Shift ×5）；Ctrl+Z / Ctrl+Y 撤销重做 */
+document.addEventListener('keydown', e=>{
+  const k = e.key;
+  if(!(e.ctrlKey||e.metaKey)){
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    if(/^(INPUT|SELECT|TEXTAREA)$/.test(tag)) return;       /* 正在填参数就不抢按键 */
+    if(k==='Escape'){ if(sel){ resetSel(); redraw(); toast('已取消选择'); } return; }
+    const k2 = k.toLowerCase();
+    if(k2==='q' || k2==='e'){                                /* 绕路线中心旋转：Q 逆时针 / E 顺时针 */
+      if(pts.length<2) return;
+      e.preventDefault();
+      const st = (parseFloat($('#rstep').value) || 15) * (e.shiftKey ? 5 : 1);
+      const dir = (k2==='q') ? 1 : -1;
+      pushHist(); rotateBy(dir*st); sel=true; redraw();
+      toast((dir>0?'逆时针 ':'顺时针 ')+st.toFixed(1)+'°（Ctrl+Z 可撤销）');
+      return;
+    }
+    const dE = (k==='ArrowRight') ? 1 : (k==='ArrowLeft') ? -1 : 0;
+    const dN = (k==='ArrowUp') ? 1 : (k==='ArrowDown') ? -1 : 0;
+    if(!dE && !dN) return;
+    if(!pts.length) return;
+    e.preventDefault();
+    const step = (parseFloat($('#nudge').value) || 2.0) * (e.shiftKey ? 5 : 1);
+    pushHist(); nudgeMeters(dE*step, dN*step); redraw();
+    toast('整体平移 东 '+(dE*step).toFixed(1)+' m / 北 '+(dN*step).toFixed(1)+' m（步长 '+step+' m，Shift ×5）');
+    return;
+  }
+  const kk = k.toLowerCase();
+  if(kk==='z' && !e.shiftKey){ e.preventDefault(); undoStep(); }
+  else if(kk==='y' || (kk==='z' && e.shiftKey)){ e.preventDefault(); redoStep(); }
+});
+
+/* 贴合道路（OSRM 公共 demo，foot profile） */
+$('#bSnap').onclick = async ()=>{
+  if(pts.length<2) return toast('至少两个点');
+  const coords = pts.map(p=>p.lng+','+p.lat).join(';');
+  const url = 'https://router.project-osrm.org/route/v1/foot/'+coords+'?overview=full&geometries=geojson';
+  $('#pill').textContent='贴路中…';
+  try{
+    const r = await fetch(url).then(x=>x.json());
+    if(!r.routes || !r.routes[0]) throw new Error(r.message||'OSRM 无结果');
+    const cs = r.routes[0].geometry.coordinates;      // [[lng,lat],...]
+    pushHist();
+    pts = cs.map(c=>({lat:c[1],lng:c[0]}));
+    setAnchor();
+    redraw(); toast('已贴合道路 · '+Math.round(r.routes[0].distance)+' m');
+  }catch(e){ toast('贴路失败：'+e.message+'（可离线忽略）'); }
+  finally{ checkLoop(); }
+};
+
+/* 搜索地点：多源地理编码（都是 WGS-84，落到 GCJ 底图前统一过 toMap） */
+/* Photon（komoot，无需 key，按地图中心偏向）Nominatim 兜底。
+   本机实测 nominatim.openstreetmap.org 不可达（8 s 超时），Photon 2.3 s 可用，所以 Photon 排第一。 */
+async function geocode(q){
+  const out=[], c=map.getCenter();
+  const T = 9000;
+  const tm = ()=> (typeof AbortSignal!=='undefined' && AbortSignal.timeout) ? AbortSignal.timeout(T) : undefined;
+  try{
+    const u='https://photon.komoot.io/api/?q='+encodeURIComponent(q)+'&limit=6'
+          +'&lat='+c.lat.toFixed(4)+'&lon='+c.lng.toFixed(4);
+    const j=await fetch(u,{signal:tm()}).then(x=>x.json());
+    for(const f of (j.features||[])){
+      const p=f.properties||{}; let lat, lng;
+      if(f.geometry && f.geometry.type==='Point'){ lng=f.geometry.coordinates[0]; lat=f.geometry.coordinates[1]; }
+      else if(p.extent && p.extent.length===4){ lng=(p.extent[0]+p.extent[2])/2; lat=(p.extent[1]+p.extent[3])/2; }
+      else continue;
+      if(!isFinite(lat) || !isFinite(lng)) continue;
+      const lab=[p.name||p.street, p.district||p.city, p.state, p.country].filter(Boolean).join(' · ');
+      out.push({lat:+lat, lng:+lng, label:lab || (lat.toFixed(5)+', '+lng.toFixed(5))});
+      if(out.length>=6) break;
+    }
+  }catch(err){}
+  if(out.length) return out;
+  try{
+    const j=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=5&q='+encodeURIComponent(q),
+                        {signal:tm()}).then(x=>x.json());
+    for(const r of (j||[])) out.push({lat:+r.lat, lng:+r.lon, label:String(r.display_name||'').slice(0,90)});
+  }catch(err){}
+  return out;
+}
+const qres=$('#qres');
+function qHide(){ if(qres){ qres.hidden=true; qres.innerHTML=''; } }
+async function qSearch(){
+  const q=$('#q').value.trim(); if(!q) return;
+  if(qres){ qres.hidden=false; qres.innerHTML='<div class="qitem dim">搜索中…</div>'; }
+  const hits=await geocode(q);
+  if(!hits.length){
+    qHide();
+    toast('没搜到「'+q.slice(0,20)+'」：换个写法（如「广东财经大学」），或直接点地图 / 用「标准跑道」生成', 5000);
+    return;
+  }
+  if(!qres) return;
+  qres.innerHTML='';
+  hits.forEach(h=>{
+    const d=document.createElement('div');
+    d.className='qitem';
+    d.textContent=h.label;
+    d.title=h.lat.toFixed(6)+', '+h.lng.toFixed(6);
+    d.onclick=()=>{                                  /* Photon/Nominatim 都是 WGS-84 → toMap 后才是底图坐标 */
+      const m=toMap({lat:h.lat, lng:h.lng});
+      map.setView([m.lat, m.lng], 16); qHide(); toast('已跳到 '+(h.label||'').slice(0,44));
+    };
+    qres.appendChild(d);
+  });
+}
+$('#q').addEventListener('keydown', e=>{
+  if(e.key==='Enter'){ e.preventDefault(); qSearch(); }
+  else if(e.key==='Escape'){ qHide(); }
+});
+$('#q').addEventListener('input', qHide);             /* 改字就收起上一次结果 */
+document.addEventListener('click', e=>{ if(qres && !qres.hidden && !qres.contains(e.target) && e.target.id!=='q') qHide(); });
+
+/* ============================ 步长（性别 + 配速 → 真人模型） ============================ */
+/* 与 tracklib.stride_for_speed 同一条模型：stride = clamp(0.6 + 0.14·v, 0.55, 1.55) × 性别系数。
+   简单模式每次生成还会在 ±5% 内随机（「随机模式」，不是每步都取同一个均匀值），所以读数写模型中心值。 */
+const STRIDE_BASE_M = 0.6, STRIDE_SLOPE_S = 0.14, STRIDE_MIN_M = 0.55, STRIDE_MAX_M = 1.55;
+const STRIDE_SEX_FACTOR = { male: 1.0, female: 0.94 };
+function strideModel(paceS, sex){
+  const v = (paceS > 0) ? 1000.0 / paceS : 0;
+  const f = STRIDE_SEX_FACTOR[sex] || 1.0;
+  return Math.min(STRIDE_MAX_M, Math.max(STRIDE_MIN_M, (STRIDE_BASE_M + STRIDE_SLOPE_S * v) * f));
+}
+function simplePace(){ return Math.max(0, (+$('#paceMin').value||0)*60 + (+$('#paceSec').value||0)); }
+/* 「分:秒」与「秒/km」是同一个量：谁动就同步另一个，避免两个模式读数打架 */
+function syncPaceFromSimple(){
+  const s = simplePace();
+  if(s > 0){ const el = $('#pace'); if(el) el.value = Math.round(s); }
+  updateStrideReadout();
+}
+function syncSimpleFromPace(){
+  const s = Math.round(+$('#pace').value || 0);
+  if(s > 0){ $('#paceMin').value = Math.floor(s/60); $('#paceSec').value = s%60; }
+  updateStrideReadout();
+}
+function updateStrideReadout(){
+  const el = $('#strideP'); if(!el) return;
+  const pace = UI.simple() ? simplePace() : Math.round(+$('#pace').value || 0);
+  const st = strideModel(pace, $('#sex') ? $('#sex').value : 'male');
+  const v = (pace > 0) ? 1000.0/pace : 0;
+  el.textContent = (pace > 0)
+    ? st.toFixed(2)+' m · 步频 '+Math.round(v/st*60)+' 步/分'
+    : '—';
+}
+$('#paceMin').oninput = syncPaceFromSimple;
+$('#paceSec').oninput = syncPaceFromSimple;
+$('#sex').onchange = updateStrideReadout;
+$('#pace').oninput = ()=>{ syncSimpleFromPace(); updateLapInfo(); };
+
+/* ============================ 简单模式：轨迹列表 / 添加轨迹 / 开跑 ============================ */
+let trackSel = '';
+const DEF_TRACK_KEY = 'route_studio.defaultTrack';
+function getDefaultTrack(){ try{ return localStorage.getItem(DEF_TRACK_KEY) || ''; }catch(e){ return ''; } }
+function setDefaultTrack(id){ try{ if(id) localStorage.setItem(DEF_TRACK_KEY, id); }catch(e){} }
+function updateDefTrackLabel(items){
+  const el = $('#defTrack'); if(!el) return;
+  const hit = (items || []).filter(r=>r.id===getDefaultTrack())[0];
+  el.textContent = hit ? (hit.name + '（' + hit.points + ' 点）') : '—';
+}
+async function refreshTracks(){
+  const sel = $('#trackList'); if(!sel) return;
+  let items = [];
+  try{ items = (await fetch('/api/routes').then(x=>x.json())).routes || []; }catch(e){}
+  const keep = sel.value || trackSel;
+  sel.innerHTML = items.length
+    ? items.map(r=>`<option value="${r.id}">${r.name}（${r.points} 点）</option>`).join('')
+    : '<option value="">（还没有轨迹）</option>';
+  /* 优先级：当前选中的 > 「设为默认」那条 > 最新一条（服务端按 saved_at 倒序返回） */
+  const def = getDefaultTrack();
+  sel.value = items.some(r=>r.id===keep) ? keep
+            : (items.some(r=>r.id===def) ? def : (items.length ? items[0].id : ''));
+  updateDefTrackLabel(items);
+  onTrackPick();
+}
+function onTrackPick(){
+  trackSel = $('#trackList').value || '';
+  const b = $('#bRun');
+  /* 有轨迹 = 这一步现在就能跑 → 按钮点亮成主色（蓝）；没轨迹就灰着且点不动。
+     今天不能跑（RUN_GATE.canRun === false）时，**有轨迹也灰掉**。 */
+  const gated = (RUN_GATE.canRun === false);
+  if(b){
+    b.disabled = !trackSel || gated;
+    b.classList.toggle('primary', !!trackSel && !gated);
+    b.textContent = gated ? '开跑（今天不能跑）' : '开跑（模拟跑步）';
+    b.title = gated ? ('今天不能跑：' + (RUN_GATE.reason || '')) : '';
+  }
+}
+$('#trackList').onchange = onTrackPick;
+$('#bAddTrack').onclick = askSaveTrack;    /* 保存当前轨迹（弹框可改名字，默认 轨迹-YYYYMMDD-HHMM） */
+$('#bSetDefault').onclick = ()=>{
+  const id = $('#trackList').value || '';
+  if(!id) return toast('先选一条轨迹');
+  setDefaultTrack(id);
+  const o = $('#trackList').selectedOptions && $('#trackList').selectedOptions[0];
+  const nm = o ? o.textContent : id;
+  const el = $('#defTrack'); if(el) el.textContent = nm;
+  toast('已设为默认轨迹：'+nm+'（下次打开默认选它）');
+};
+/* ============================ 实时上传（长任务轮询） ============================ */
+/* 勾上「实时上传」＝按计划的真实用时跑一遍：人脸打卡在它该出现的那一刻发、跑到点才上传
+   （墙钟与上传的 endTime 对得上）。真要等十几分钟，所以服务端另起线程跑、回一个 job id：
+   这里每 0.5 s 拉一次——已出的回执照画，进度条按「已跑 / 计划」走，地图上再放个绿点、
+   绿点走过的路连成一条绿线（绿点＝现在、绿线＝已跑）。 */
+const RT_POLL_MS = 500;
+const rtSleep = ms => new Promise(r=>setTimeout(r, ms));
+const fmtMS = ms => { const s = Math.max(0, Math.round((ms||0)/1000));
+  const m = Math.floor(s/60), ss = s%60; return (m<10?'0':'')+m+':'+(ss<10?'0':'')+ss; };
+let rtJob = '', rtMark = null, rtTrail = null;
+/* 绿线＝**这一圈已经跑过的那一段**：拿「已跑米数」在轨迹几何上切出来 ——
+   不去连「每 0.5 s 拉一次」的脚印（×60 时脚印隔上百米，连出来是一张网，2026-09-24 实测踩过）。 */
+let rtPath = null, rtCum = [], rtLap = 0;
+function rtBuildPath(){
+  if(!pts || pts.length < 2) return;
+  const R = 6371000, rad = Math.PI / 180, kx = Math.cos(pts[0].lat * rad) * R * rad, ky = R * rad;
+  rtPath = []; rtCum = [];
+  let acc = 0;
+  for(let i = 0; i < pts.length; i++){
+    const m = toMap(pts[i]);
+    if(i){ const a = rtPath[i-1]; acc += Math.hypot((m.lat - a[0]) * ky, (m.lng - a[1]) * kx); }
+    rtPath.push([m.lat, m.lng]); rtCum.push(acc);
+  }
+  rtLap = acc;                                   /* 单圈长度（跑多圈时按它取模） */
+}
+function rtTrailSeg(cut){
+  const out = [];
+  if(!rtPath || rtPath.length < 2 || !(cut > 0)) return out;
+  for(let i = 1; i < rtPath.length; i++){
+    if(rtCum[i] <= cut){ out.push(rtPath[i]); continue; }
+    const t = (cut - rtCum[i-1]) / Math.max(1e-6, rtCum[i] - rtCum[i-1]);
+    out.push([rtPath[i-1][0] + (rtPath[i][0] - rtPath[i-1][0]) * t,
+              rtPath[i-1][1] + (rtPath[i][1] - rtPath[i-1][1]) * t]);
+    break;
+  }
+  if(out.length) out.unshift(rtPath[0]);         /* 带上起点，绿线从起点长出来 */
+  return out;
+}
+function rtLapTxt(p){
+  if(!(rtLap > 0) || !(p && p.total_m > rtLap * 1.5)) return '';
+  const m = Math.max(1, Math.round(p.total_m / rtLap));
+  return ' · 第 ' + Math.min(m, Math.floor((p.cum_m || 0) / rtLap) + 1) + '/' + m + ' 圈';
+}
+function rtBegin(job, speed){
+  rtJob = job || '';
+  if(rtTrail){ try{ map.removeLayer(rtTrail); }catch(e){} rtTrail = null; }
+  rtBuildPath();
+  const bar = $('#rtBar'); if(bar) bar.style.display = '';
+  const box = $('#runSteps'); if(box) box.innerHTML = '';
+  if($('#pill')) $('#pill').textContent = '实时上传中…' + (speed > 1 ? ('（×'+speed+'）') : '');
+  rtPaint({ phase:'准备', done_ms:0, total_ms:0, elapsed_ms:0, steps:[], speed:speed, pos:null });
+}
+function rtRows(box, steps){
+  if(!box) return;
+  box.innerHTML = '<div class="hint">实时回执（边跑边出）</div>' + (steps||[]).map(s=>
+      '<div class="stepitem"><span>'+s.name+'</span><b class="'+(s.ok?'okdot':'errdot')+'">'
+      +(s.ok?'OK':'FAIL')+'</b></div>'
+      + (s.detail ? '<div class="hint">'+String(s.detail)+'</div>' : '')).join('');
+}
+function rtPaint(st){
+  const sp = (st.speed > 1) ? ('（×'+st.speed+'）') : '';
+  if($('#rtPhase')) $('#rtPhase').textContent = (st.phase || '实时上传中…') + sp;
+  if($('#rtTime')) $('#rtTime').textContent = st.total_ms
+      ? (fmtMS(st.done_ms) + ' / ' + fmtMS(st.total_ms)) : fmtMS(st.elapsed_ms || 0);
+  if($('#rtProg')) $('#rtProg').value = st.total_ms ? Math.min(100, (st.done_ms||0)/st.total_ms*100) : 0;
+  const p = st.pos;                                  /* 跑到哪了：地图上一个绿点 + 一行读数 */
+  if($('#rtPos')) $('#rtPos').textContent = p
+      ? ('已跑 ' + ((p.cum_m||0)/1000).toFixed(2) + ' / ' + ((p.total_m||0)/1000).toFixed(2)
+         + ' km · 第 ' + (p.idx+1) + '/' + p.n + ' 个采样点 · ' + (p.speed_mps||0).toFixed(2) + ' m/s'
+         + (p.paused ? ' · 暂停中' : '') + rtLapTxt(p)) : '—';
+  if(p && map){
+    const m = toMap({lat:p.lat, lng:p.lng});
+    if(!rtMark){ rtMark = L.circleMarker([m.lat,m.lng], {radius:9, color:'#fff', weight:3,
+      fillColor:'#2fbf71', fillOpacity:1}).addTo(map); }
+    else { rtMark.setLatLng([m.lat,m.lng]); }
+    if(rtLap > 0){                                  /* 绿线：这一圈已经跑过的那一段 */
+      const seg = rtTrailSeg(Math.min((p.cum_m || 0) % rtLap, rtLap));
+      if(seg.length >= 2){
+        if(!rtTrail){ rtTrail = L.polyline(seg, {color:'#2fbf71', weight:4,
+          opacity:0.85, lineCap:'round'}).addTo(map); }
+        else { rtTrail.setLatLngs(seg); }
+      }
+    }
+  }
+  rtRows($('#runSteps'), st.steps || []);
+}
+function rtEnd(){
+  rtJob = '';
+  const bar = $('#rtBar'); if(bar) bar.style.display = 'none';
+  if(rtMark){ try{ map.removeLayer(rtMark); }catch(e){} rtMark = null; }
+  if(rtTrail){ try{ map.removeLayer(rtTrail); }catch(e){} rtTrail = null; }
+  rtPath = null; rtCum = []; rtLap = 0;
+}
+/* 跑一半的两个出口（都走同一个接口，靠 mode 区分）：
+   #rtStopSend 停止并上传 —— 停在当前这一刻，按**已经跑到的那一段**上传；
+   #rtStop     中止       —— 这一条整个不传。 */
+async function rtStopAsk(mode, label){
+  if(!rtJob) return;
+  const b = $(mode === 'stop' ? '#rtStopSend' : '#rtStop'); if(b) b.disabled = true;
+  try{ await fetch('/api/stage/run/cancel',{method:'POST',
+        headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:rtJob, mode:mode})});
+       toast(label, 2600); }catch(e){}
+  setTimeout(()=>{ if(b) b.disabled = false; }, 1500);
+}
+if($('#rtStop')) $('#rtStop').onclick = ()=>rtStopAsk('abort', '已请求中止：这一条不上传…');
+if($('#rtStopSend')) $('#rtStopSend').onclick = ()=>rtStopAsk('stop', '已请求停止：按已跑的那一段上传…');
+
+$('#bRun').onclick = async ()=>{
+  let _runPill = '';                    /* 收尾时 checkLoop() 会改状态条，这里留一份「最终说法」 */
+  if(!trackSel) return toast('先从列表里选一条轨迹');
+  if(!WIZ.sid){ toast('先完成「登录」'); wizGoto(1); return; }
+  /* 实时上传（简单模式默认勾上）：按计划的真实用时跑一遍。长任务 → 服务端回 job id，这里轮询。 */
+  const rt = !!($('#rtMode') && $('#rtMode').checked);
+  const rtSpeed = rt ? Math.max(1, Math.round(+($('#rtSpeed') ? $('#rtSpeed').value : 1) || 1)) : 1;
+  $('#bRun').disabled = true;
+  $('#pill').textContent = rt ? '实时上传中…' : '开跑中…';
+  try{
+    const d = await fetch('/api/routes/load?id='+encodeURIComponent(trackSel)).then(x=>x.json());
+    if(d.error) throw new Error('轨迹读不到');
+    pushHist();
+    pts = ensureDir(ptsFromRoute(d));     /* 「方向」对开跑也生效（闭环才动） */
+    if(UI.min()){ const rp = randomizeStart(pts); if(rp){ pts = rp; toast('本次从轨迹的随机一点起跑', 2600); } }   /* 极简默认每次开跑换一个起点 */
+    confirmed = false; confirmDirty = false; confirmedUnsaved = false;   /* 开跑载入的是已保存的，确认态归零 */
+    setAnchor(); setMode('move'); sel = true; rotAcc = 0; redraw();
+    if(pts.length > 1){ const mm = pts.map(p=>{ const m=toMap(p); return [m.lat,m.lng]; });
+      map.fitBounds(L.latLngBounds(mm).pad(0.2)); }
+    /* 这一环交给服务端：开跑时刻 → 生成 → 人脸 → 上传 → 读回 → 汇总（复用第一步登录的 session） */
+    const body = { sid: WIZ.sid,
+                   chain: WIZ.chain || (($('#chain') && $('#chain').value) || 'v1'),
+                   base: WIZ.base || (($('#base') && $('#base').value.trim()) || ''),
+                   params: params(), faces: true, realtime: rt, speed: rtSpeed,
+                   device: params().device, app_version: params().app_version,
+                   face_image_b64: (WIZ.faceB64 || undefined),
+                   run_type: +($('#lgRtype') ? $('#lgRtype').value
+                             : ($('#rtype') ? $('#rtype').value : 1)) };
+    let r = await fetch('/api/stage/run',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)}).then(x=>x.json());
+    if(r.async && r.job){                     /* 实时上传：长任务，边跑边拉回执 / 进度 / 位置 */
+      rtBegin(r.job, rtSpeed);
+      for(let i=0; ; i++){
+        await rtSleep(RT_POLL_MS);
+        const st = await fetch('/api/stage/run/status?id='+encodeURIComponent(r.job)).then(x=>x.json());
+        if(st.error) throw new Error(st.error);
+        rtPaint(st);
+        if(st.state !== 'running'){
+          r = st.result || { ok:false, steps: st.steps||[], error: st.error||st.state };
+          break;
+        }
+        if(i > 7200) throw new Error('实时上传等太久了（>1 小时）');
+      }
+    }
+    renderSteps($('#runSteps'), r);
+    if(r.gen){ lastRes = Object.assign({}, r.gen); try{ renderResult(lastRes); }catch(e){} }
+    const nFail = (r.steps||[]).filter(s=>!s.ok).length;
+    if(r.stopped){ _runPill = '已停止（按已跑上传）';
+      toast('已停止：按已跑 ' + Math.round(r.run_m || 0) + ' m / ' + Math.round(r.plan_m || 0)
+            + ' m 上传' + (r.recordId ? '（recordId=' + r.recordId + '）' : ''), 5200); }
+    else if(r.cancelled){ _runPill = '开跑已中止';
+      toast('已中止：这一条没有上传', 4200); }
+    else if(r.ok){ _runPill = '开跑完成';
+      toast('开跑完成：'+(r.steps||[]).length+' 步全过（'+(r.chain||'')+'）', 4800); }
+    else { _runPill = '开跑有失败';
+      toast('开跑有 '+nFail+' 步失败——看下面回执', 5000); }
+  }catch(e){ toast('开跑失败：'+e.message); _runPill = '开跑失败'; }
+  finally{ rtEnd(); onTrackPick(); checkLoop(); renderRunSummary();
+           if(_runPill) $('#pill').textContent = _runPill; }   /* 状态条以开跑结果为准，不被画布读数顶掉 */
+};
+
+/* ============================ 两屏：登录页（整屏）→ 操作界面（带地图） ============================ */
+/* 登录是**独立的一屏**：没登录只看得到登录页（#loginScr），带地图的操作界面（#app）整个是 locked（display:none）。
+   登录只登录 + 拉设置（不生成、不上传、不写记录），拿到的 session 交给操作界面里的「开跑」复用
+   （服务端：/api/stage/login → sid → /api/stage/run）。
+   进了操作界面之后：画线/线路（#pane2）与开跑（#pane3）**同屏**都看得见 —— 登录不再和它们挤在一个界面里。 */
+const WIZ = { step: 1, sid: '', chain: '', identify: '', base: '', baseAuto: '', baseAutoSrc: '', login: null };
+/* 人脸照：上传本人**已注册**的那张脸（开跑时拿它打卡）。留空 ⇒ 先试服务器已注册底片，
+   再不行才发占位图（真实学校会判不通过）。选完把 base64 存进 WIZ.faceB64，随开跑请求发。 */
+function syncFaceHint(){
+  const h = $('#faceHint'); if(!h) return;
+  h.innerHTML = WIZ.faceB64
+    ? ('已选人脸照（约 '+Math.round(WIZ.faceB64.length*3/4)+' B）——开跑时用它打卡')
+    : '可上传本人<b>已注册</b>的那张脸照（jpg/png），或点「用电脑摄像头扫脸」现拍一张。留空则：能自动取到服务器已注册底片就用底片，取不到就发占位图（<b>真实学校会判不通过</b>）。';
+}
+if($('#faceFile')) $('#faceFile').onchange = (e)=>{
+  const f = e.target.files && e.target.files[0];
+  if(!f){ WIZ.faceB64 = ''; syncFaceHint(); return; }
+  const fr = new FileReader();
+  fr.onerror = ()=> toast('人脸照读不出来，换个文件试试');
+  fr.onload = ()=>{ const s = String(fr.result || ''); WIZ.faceB64 = s.split(',')[1] || ''; syncFaceHint(); toast('已选人脸照：'+f.name); };
+  fr.readAsDataURL(f);
+};
+/* 扫脸：学校要求人脸打卡时，直接调**电脑摄像头**拍一张 ⇒ 和上传的脸照走同一条路（WIZ.faceB64），
+   开跑时随 face_image_b64 发出去。工作台在 http://127.0.0.1 / localhost 上 ⇒ 浏览器认它是安全上下文，
+   允许 getUserMedia（http 的局域网 IP 则会被拒，那种情况如实提示改用「人脸照」选图片）。 */
+let _camStream = null, _camDev = '';
+function camApi(){ return (window.navigator && window.navigator.mediaDevices) || null; }
+function camNote(m){ const s = $('#camState'); if(s) s.textContent = m || ''; }
+function camClose(){
+  try{ if(_camStream) _camStream.getTracks().forEach(t=>t.stop()); }catch(e){}
+  _camStream = null;
+  if($('#camV')) $('#camV').srcObject = null;
+  if($('#camWrap')) $('#camWrap').hidden = true;
+  camNote('');
+}
+function camOpen(){
+  const md = camApi();
+  if(!md || !md.getUserMedia){
+    toast('这个环境用不了摄像头（浏览器不支持 / 不是安全上下文）——改用「人脸照」选图片');
+    camNote('用不了摄像头'); return;
+  }
+  if($('#camWrap')) $('#camWrap').hidden = false;
+  camNote('正在打开摄像头…');
+  md.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false })
+    .then(st=>{
+      _camStream = st;
+      const v = $('#camV');
+      if(v){ v.srcObject = st; try{ v.play(); }catch(e){} }
+      camNote('对着摄像头露脸，点「拍照并采用」');
+    })
+    .catch(e=>{
+      camNote('');
+      toast('摄像头打不开：' + ((e && (e.name || e.message)) || e) + '（可改用「人脸照」选图片）');
+    });
+}
+function camSnap(){
+  const v = $('#camV'), c = $('#camC');
+  if(!v || !c) return;
+  const w = v.videoWidth || 0, h = v.videoHeight || 0;
+  if(!w || !h){ toast('画面还没准备好，等一秒再按'); return; }
+  c.width = w; c.height = h;
+  const g = c.getContext('2d'); g.drawImage(v, 0, 0, w, h);
+  const data = c.toDataURL('image/jpeg', 0.92);
+  WIZ.faceB64 = data.split(',')[1] || '';
+  syncFaceHint();
+  toast('已采用摄像头照片：' + w + '×' + h + '（约 ' + Math.round(WIZ.faceB64.length*3/4) + ' B）');
+  camClose();
+}
+function faceScanNow(){
+  const r = WIZ.faceReq || {};
+  if(r.s && $('#fS')) $('#fS').checked = true;
+  if(r.e && $('#fE')) $('#fE').checked = true;
+  if(r.m && $('#fM') && !$('#fM').value && (r.mid || []).length) $('#fM').value = r.mid.join(',');
+  try{ UI.set('adv'); }catch(e){}                              /* 人脸打卡栏在高级模式里 */
+  try{ if($('#camWrap') && $('#camWrap').scrollIntoView) $('#camWrap').scrollIntoView({ block: 'center' }); }catch(e){}
+  camOpen();
+}
+window.faceScanNow = faceScanNow;                              /* 自测用 */
+if($('#faceCam')) $('#faceCam').onclick = ()=> (_camStream ? camSnap() : camOpen());
+if($('#camSnap')) $('#camSnap').onclick = camSnap;
+if($('#camStop')) $('#camStop').onclick = camClose;
+syncFaceHint();
+function wizGoto(n){
+  if((n|0) >= 2 && !WIZ.sid){ toast('先在登录页登录'); n = 1; }   /* 没登录进不去（硬跳被挡回登录页） */
+  const inApp = (n|0) >= 2;
+  WIZ.step = inApp ? 2 : 1;
+  const app = $('#app'), lg = $('#loginScr');
+  if(lg) lg.hidden = inApp;
+  if(app) app.classList.toggle('locked', !inApp);
+  const u = $('#wizUser');
+  if(u) u.textContent = inApp
+    ? ('已登录 · ' + (WIZ.chain || '—') + (WIZ.identify ? (' · ' + WIZ.identify) : ''))
+    : '未登录';
+  if(inApp){
+    /* 地图是在 #app 的 display:none 里初始化的（容器 0×0）⇒ 进屏第一件事是让它重算尺寸 */
+    try{ map.invalidateSize(); }catch(e){}
+    renderRunSummary();
+  }
+}
+window.wizGoto = wizGoto;                       /* 自测用 */
+function renderSteps(box, r){
+  if(!box) return;
+  const steps = (r && r.steps) || [];
+  const nFail = steps.filter(s=>!s.ok).length;
+  const head = !r ? '' : (r.ok
+    ? '<div class="stat"><span>结果</span><span class="badge ok">'+steps.length+' 步全过</span></div>'
+    : '<div class="stat"><span>结果</span><span class="badge err">'+nFail+' 步失败 / 共 '+steps.length+' 步</span></div>');
+  const rows = steps.map(s=>'<div class="stepitem"><span>'+s.name+'</span><b class="'
+      +(s.ok?'okdot':'errdot')+'">'+(s.ok?'OK':'FAIL')+'</b></div>'
+      +(s.detail?'<div class="hint">'+String(s.detail)+'</div>':'')).join('');
+  const er = (r && r.error) ? '<div class="hint" style="color:var(--err)">'+String(r.error)+'</div>' : '';
+  box.innerHTML = head + rows + er;
+}
+function renderRunSummary(){
+  const el = $('#runSummary'); if(!el) return;
+  const o = $('#trackList') ? $('#trackList').selectedOptions[0] : null;
+  const tkm = $('#tkm') ? $('#tkm').value : '—';
+  const rtype = $('#rtype') && $('#rtype').selectedOptions[0] ? $('#rtype').selectedOptions[0].textContent : '—';
+  el.innerHTML = '<div class="stat"><span>选中的轨迹</span><b>'+(o ? o.textContent : '（还没选）')+'</b></div>'
+    + '<div class="stat"><span>目标距离</span><b>'+tkm+' km</b></div>'
+    + '<div class="stat"><span>跑步类型</span><b>'+rtype+'</b></div>'
+    + '<div class="stat"><span>登录（第一步）</span><b>'+(WIZ.sid ? ('已登录 · '+WIZ.chain) : '未登录')+'</b></div>'
+    + '<div class="stat"><span>上传方式</span><b>'+rtLabel()+'</b></div>';
+}
+/* 密码框是真 `type=password`，右边小眼睛 `#pwdEye` 切显示 / 隐藏（图标 👁 ↔ 🙈）。 */
+function pwdEye(){
+  const p = $('#upwd'), b = $('#pwdEye'); if(!p || !b) return;
+  const show = (p.type === 'password');
+  p.type = show ? 'text' : 'password';
+  b.textContent = show ? '🙈' : '👁';
+  b.title = show ? '隐藏密码' : '显示密码';
+  b.classList.toggle('on', show);
+}
+if($('#pwdEye')) $('#pwdEye').onclick = pwdEye;
+
+/* 「服务器」那一格：**跟着选中学校走** ——
+   v1 老链路打的是公共域 m.boxkj.com（固定），v2 新链路打的是那所学校目录里的 lan_url（它自己的接口服务器）。
+   自己手改过就不再覆盖（清空后会重新跟随），右边一枚小标签说明这个值是哪儿来的。 */
+const DIR_BASE = 'https://m.boxkj.com';      /* 老链路 v1 的固定服务器：选校 / 登录 / 取学校信息那一层 */
+function schoolCloudUrl(code){
+  /* v2 新链路的服务器基址 = 目录里的 **lan_url**（那所学校自己的接口服务器；没有时才回落厂商默认域），
+     **不是** `school_url` —— school_url 是这个学校的 **H5 门户页**（`…/h5?school=xx` 或 `h.tsnkj.com/?school=xx`），
+     拿它当基址去请求 `auth/oauth/token` 只会打进一个网页地址 ⇒ 真实账号也「登录不上」
+     （2026-09-24 用户报的就是这个；参考实现 `TiShiNengSdkPublic.setCloudUrl(lan_url)` 同名同义）。 */
+  const s = SCHOOLS.byCode[String(code == null ? '' : code).trim()];
+  if(!s) return '';
+  return String(s.lanUrl || s.url || '');
+}
+/* 「这所学校要求校园网吗」——目录里 `insideNetwork=1` 的学校（如 scau / gdut）：
+   不在校内网里，账号再对也登不上（接口返回它自己的提示语）。选校时直接说清楚，别让用户以为是账号问题。 */
+function isInsideNet(s){
+  return !!s && String(s.insideNetwork == null ? '' : s.insideNetwork) === '1';
+}
+function warnInsideNet(){
+  const s = SCHOOLS.byCode[schPick()];
+  if(!isInsideNet(s)) return false;
+  const msg = String(s.insideNetworkMsg || '').trim();
+  toast('⚠ 这所学校要求「校园网」登录' + (msg ? ('：' + msg) : '') + '（不在校内网里会登录失败 —— 不是账号 / 密码的问题）', 7200);
+  return true;
+}
+function srvDefault(){
+  const chain = $('#chain') ? String($('#chain').value) : 'v1';
+  if(chain === 'v1') return DIR_BASE;
+  return schoolCloudUrl(schPick());
+}
+function srvTag(){
+  const tag = $('#srvTag'), b = $('#base'); if(!tag || !b) return;
+  const v = String(b.value || '').trim();
+  tag.classList.add('clicky');                     /* 点一下 = 让「服务器」重新跟着学校走 */
+  if(!v){ tag.textContent = '自己填'; tag.title = '自己填：直接写地址，或点我从所选学校带一个'; return; }
+  if(v === WIZ.baseAuto){
+    tag.textContent = (WIZ.baseAutoSrc === 'v1') ? 'v1 公共域 m.boxkj.com · 与学校无关' : '该校服务器 · 跟随学校';
+    tag.title = (WIZ.baseAutoSrc === 'v1')
+      ? 'v1 老链路固定打公共域 m.boxkj.com（跟选哪所学校无关）；要打学校自己的服务器，把「链路」切到 v2 —— 或直接换个学校，会自动帮你切'
+      : '这是所选学校目录里的 lan_url = 那所学校自己的接口服务器（换学校就跟着换）。'
+        + '目录里的 school_url 只是它的 H5 门户页（…/h5?school=xx），不能当接口基址用';
+    return;
+  }
+  tag.textContent = '自定义';
+  tag.title = '这个地址是你自己填的 · 点我恢复「跟随所选学校」';
+}
+function syncSrv(force){
+  const b = $('#base'); if(!b) return '';
+  b.readOnly = false;
+  const cur = String(b.value || '').trim();
+  if(force || !cur || cur === WIZ.baseAuto){
+    b.value = WIZ.baseAuto = srvDefault();
+    WIZ.baseAutoSrc = (($('#chain') ? String($('#chain').value) : 'v1') === 'v1') ? 'v1' : 'v2';
+  }
+  srvTag();
+  return b.value;
+}
+/* 「换学校」这个动作：让「服务器」跟着走。
+   用户心里的「服务器」＝**那所学校自己的服务器**（目录里的 lan_url）；v1 的公共域跟不上学校，
+   所以：学校有自有服务器而链路还停在 v1（默认、没动过）⇒ 顺手帮你切到 v2 并说一声。
+   自己动过「链路」就不再自动切；自己填过「服务器」也不覆盖，但明确告诉他怎么恢复（点小标签）。 */
+function followSrvSchool(quiet){
+  const b = $('#base'), c = $('#chain');
+  if(!b) return;
+  const cu = schoolCloudUrl(schPick());
+  if(!UI._chainTouched && c && c.value === 'v1' && cu){
+    c.value = 'v2'; _syncChain();
+    if(!quiet) toast('链路已按所选学校切到 v2（打该校自有服务器）', 4200);
+    syncSrv(); return;
+  }
+  const cur = String(b.value || '').trim();
+  if(cur && cur !== WIZ.baseAuto){
+    if(!quiet) toast('「服务器」是你自己填的 · 点右边小标签可恢复「跟随学校」', 4600);
+    return;
+  }
+  syncSrv();
+}
+if($('#srvTag')) $('#srvTag').onclick = ()=>{ syncSrv(true); toast('「服务器」已恢复跟随所选学校', 3200); };
+
+/* 实时上传：标签字 + 「手动拨过就不再跟模式走」（简单模式默认勾上） */
+function syncRtTag(){
+  const c = $('#rtMode'), t = $('#rtTag'); if(!t) return;
+  t.textContent = (c && c.checked) ? '按真实用时跑完再传' : '立刻上传';
+}
+function rtLabel(){
+  const c = $('#rtMode'); if(!c || !c.checked) return '立刻上传';
+  const v = Math.max(1, +($('#rtSpeed') ? $('#rtSpeed').value : 1) || 1);
+  return '实时·按计划用时（×'+v+'）';
+}
+if($('#rtMode')) $('#rtMode').onchange = ()=>{ UI._rtTouched = true; syncRtTag(); renderRunSummary(); };
+
+/* 选校：省份 + 学校下拉。目录是**公共**的（选校在登录之前，不需要 token），
+   优先问当前服务器（能拿到就列），拿不到再回落包内快照（只有广东省）。
+   「学校」是**原生下拉**（`<select>`）：单行「名字（code）」，一次能看到十几二十行，也能照着可见文字打字跳转。
+   要填目录里没有的 code 就选最后那档「✏️ 手动填写 schoolCode…」，旁边会露出输入框。
+   （2026-09-24 之前用的是 `input + datalist`：弹层每个选项占两行，一次只看得到 3 所学校，用户以为里面就 3 所。） */
+const SCHOOLS = { list: [], byCode: {} };
+const DEFAULT_SCHOOL = 'gdufe';    // 目录还没加载出来时用的 schoolCode（老行为）
+/* 目录（m.boxkj.com）里有的条目**名字是对方打码的**：`gdut` 显示成「广东某某大学」，
+   本地包内快照里留着真名 ⇒ 这里按 code 覆盖显示名。顺带把**常用简称**配上，
+   让「搜校」框打「广工 / 华农 / 广外 / 深大」也能搜到（用户 2026-09-24 要求）。 */
+const SCHOOL_FIX = {
+  "dgut": { aka: ["东莞理工", "莞工"] },
+  "csxy": { aka: ["东莞理工城市学院", "城院"] },
+  "dgpt": { aka: ["东莞职院", "东职"] },
+  "sysu": { aka: ["中大"] },
+  "zstp": { aka: ["中山火炬", "火炬职院"] },
+  "zsc": { aka: ["中山电子", "电子科大中山学院", "中山学院"] },
+  "zhku": { aka: ["仲恺", "仲恺农工"] },
+  "tcydh": { aka: ["体测", "运动会"] },
+  "fspt": { aka: ["佛职院", "佛职"] },
+  "scau": { aka: ["华农", "华南农大"] },
+  "scauzj": { aka: ["华农珠江", "珠江学院"] },
+  "scnu": { aka: ["华师", "华南师大"] },
+  "smu": { aka: ["南医大", "南方医大"] },
+  "nuit": { aka: ["东软", "东软学院"] },
+  "gdcp": { aka: ["广东交通", "广交院"] },
+  "gtiit": { aka: ["广以", "以色列理工"] },
+  "gdaib": { aka: ["农工商"] },
+  "gdcxxy": { aka: ["创新科技", "创新学院"] },
+  "nhic": { aka: ["南华工商", "南华"] },
+  "gdsfjy": { aka: ["司法警官", "广司警"] },
+  "gdufs": { aka: ["广外"] },
+  "gwng": { aka: ["广外南国", "南国商学院", "南国"] },
+  "gdfs": { aka: ["广东女院", "女院"] },
+  "lnc": { aka: ["岭南职院", "岭南学院"] },
+  "gdbtu": { aka: ["广东工商", "工商职大"] },
+  "gdep": { aka: ["广东工程"] },
+  "gdgm": { aka: ["广东工贸", "工贸"] },
+  "gdcvi": { aka: ["广东建设", "建设职院"] },
+  "gpnu": { aka: ["广技师", "广东技师大"] },
+  "gdla": { aka: ["广东文艺", "文艺职院"] },
+  "gdxa": { aka: ["广东新安", "新安职院"] },
+  "gdmec": { aka: ["广东机电", "机电职院"] },
+  "gdut": { name: "广东工业大学", aka: ["广工", "广东工大"] },
+  "mzvtc": { aka: ["梅州职院"] },
+  "gdsdxy": { aka: ["广东水电", "水利电力"] },
+  "gdpepe": { aka: ["广东环保", "环保学院"] },
+  "gdlgxy": { aka: ["广东理工", "广理"] },
+  "gdsty": { aka: ["广东生态", "生态工程"] },
+  "baiyunu": { aka: ["白云学院"] },
+  "gtcfla": { aka: ["广外艺", "外语艺术"] },
+  "bgypt": { aka: ["碧桂园职院", "碧职院"] },
+  "gdit": { aka: ["广科", "科干院"] },
+  "gdust": { aka: ["东莞广科"] },
+  "gdkm": { aka: ["广东科贸", "科贸"] },
+  "gdei": { aka: ["广二师", "广东二师"] },
+  "gdpt": { aka: ["广东职院", "广职院"] },
+  "gdzqac": { aka: ["肇庆航空"] },
+  "gdddc": { aka: ["广东艺术"] },
+  "gdpu": { aka: ["广药", "广东药大"] },
+  "gdxzzy": { aka: ["广东行政"] },
+  "gdppla": { aka: ["广警", "广东警官"] },
+  "gdufe": { aka: ["广财", "广东财大"] },
+  "gdcmxy": { aka: ["广东财贸", "财贸职院"] },
+  "gdqy": { aka: ["广东轻工", "广轻"] },
+  "gduf": { aka: ["广金", "广东金融"] },
+  "gdyzy": { aka: ["广东食药", "食品药品"] },
+  "gzdhxy": { aka: ["广州东华", "东华职院"] },
+  "gzucm": { aka: ["广中医"] },
+  "gztzy": { aka: ["广州体职", "体职院"] },
+  "gzhmu": { aka: ["广医"] },
+  "scbt": { aka: ["华南商贸"] },
+  "gdhsc": { aka: ["华商学院", "广华商"] },
+  "gzhxtc": { aka: ["广州华夏", "华夏职院"] },
+  "hualixy": { aka: ["华立学院"] },
+  "gzhlxy": { aka: ["华立科技", "华立职院"] },
+  "nfu": { aka: ["南方学院"] },
+  "gznylg": { aka: ["南洋理工", "南洋职院"] },
+  "gzws": { aka: ["广州卫职", "卫生职院"] },
+  "gcc": { aka: ["广商"] },
+  "gcu": { aka: ["广州城理", "城理"] },
+  "gcp": { aka: ["广州城职"] },
+  "gzccc": { aka: ["广州城建", "城建职院"] },
+  "gzhu": { aka: ["广大"] },
+  "gzgs": { aka: ["广州工商"] },
+  "gzvtc": { aka: ["广州工程"] },
+  "gzlis": { aka: ["广州轻工"] },
+  "gzys": { aka: ["广州幼师"] },
+  "sontan": { aka: ["广州应用"] },
+  "kdvtc": { aka: ["康大", "康大职院"] },
+  "gzst": { aka: ["松田", "松田职院"] },
+  "gcac": { aka: ["广州民航", "民航职院"] },
+  "gzmiec": { aka: ["广州现代信息"] },
+  "gzist": { aka: ["广州理工"] },
+  "gkd": { aka: ["广州科技"] },
+  "gzarts": { aka: ["广美"] },
+  "gzpyp": { aka: ["广州职大"] },
+  "gzmtu": { aka: ["广航", "广州航海"] },
+  "gzus": { aka: ["广州软件", "广软"] },
+  "gtxy": { aka: ["广铁", "广州铁路"] },
+  "hzu": { aka: ["惠院"] },
+  "hzevc": { aka: ["惠州工程", "惠工"] },
+  "xhcom": { aka: ["星海"] },
+  "stu": { aka: ["汕大"] },
+  "med": { aka: ["汕大医学院", "汕医"] },
+  "szu": { aka: ["深大"] },
+  "szsuat": { aka: ["深理工"] },
+  "szpt": { aka: ["深职大", "深职"] },
+  "chaoshan": { aka: ["潮汕职院"] },
+  "zhcpt": { aka: ["珠海城职"] },
+  "hlu": { aka: ["华联学院"] },
+  "zqu": { aka: ["肇院"] },
+  "hstc": { aka: ["韩师", "韩山师院"] },
+  "sgu": { aka: ["韶院"] },
+  "sdpt": { aka: ["顺职大", "顺职"] },
+};
+function schoolName(s){ const f = SCHOOL_FIX[s.code]; return (f && f.name) || s.name || s.code; }
+function schoolAka(s){ return (SCHOOL_FIX[s.code] || { aka: [] }).aka; }
+function schoolText(s){ return (schoolName(s) + ' ' + s.code + ' ' + schoolAka(s).join(' ')).toLowerCase(); }
+function schoolMatch(s, q){ return schoolText(s).indexOf(q) >= 0; }
+function schoolLabel(s){
+  const a = schoolAka(s);
+  return schoolName(s) + '（' + (a.length ? (a.slice(0, 3).join(' · ') + ' · ') : '') + s.code + '）';
+}
+function schoolQuery(){
+  const el = $('#schoolQ');
+  return el ? String(el.value || '').trim().toLowerCase().replace(/\s+/g, '') : '';
+}
+function schoolRows(){                            /* 当前筛出来的学校（空查询 = 全部） */
+  const q = schoolQuery();
+  return !q ? SCHOOLS.list.slice() : SCHOOLS.list.filter(s=>schoolMatch(s, q));
+}
+const SCH_SRC = { snapshot: '包内快照', mock: '本机自带 mock 目录', live: '公共目录 m.boxkj.com' };
+function renderSchools(prefer){        /* 按「搜校」框重排下拉；当前选中若被筛掉就钉在最上面，免得一打字就丢 */
+  const sel = $('#school'); if(!sel) return;
+  const rows = schoolRows();
+  const prev = String(prefer != null ? prefer : (sel.value || '')).trim();
+  const has = c => rows.some(s=>s.code === c);
+  const out = [];
+  if(prev && prev !== '__manual__' && SCHOOLS.byCode[prev] && !has(prev))
+    out.push('<option value="'+prev+'">'+schoolLabel(SCHOOLS.byCode[prev])+' ← 当前</option>');
+  rows.forEach(s=>out.push('<option value="'+s.code+'">'+schoolLabel(s)+'</option>'));
+  out.push('<option value="__manual__">✏️ 手动填写 schoolCode…</option>');
+  sel.innerHTML = out.join('');
+  let v = '';
+  if(prev === '__manual__') v = '__manual__';
+  else if(prev && (has(prev) || SCHOOLS.byCode[prev])) v = prev;
+  else if(SCHOOLS.byCode[DEFAULT_SCHOOL]) v = DEFAULT_SCHOOL;
+  else if(rows.length) v = rows[0].code;
+  else v = '__manual__';
+  sel.value = v;
+  schManual(); schHit(); schHint(); syncSrv();
+}
+function schHit(){                    /* 「搜校」框下面那行：一共多少所 / 匹配到几所 */
+  const box = $('#schoolHit'); if(!box) return;
+  const q = schoolQuery(), rows = schoolRows();
+  if(!q){ box.textContent = '目录共 ' + SCHOOLS.list.length + ' 所（上面可按 全称 / 简称 / code 过滤）'; return; }
+  if(!rows.length){ box.textContent = '没匹配到「' + q + '」—— 可直接手填 schoolCode'; return; }
+  box.textContent = '匹配 ' + rows.length + ' 所：' + rows.slice(0, 4).map(s=>schoolName(s)).join('、')
+    + (rows.length > 4 ? ' 等' : '');
+}
+function schManual(){                 /* 只有选中「✏️ 手动填写…」那档才露出输入框 */
+  const sel = $('#school'), row = $('#rowManual');
+  if(sel && row) row.style.display = (sel.value === '__manual__') ? '' : 'none';
+}
+function schPick(){                    /* 现在该拿哪个 schoolCode 去登录 */
+  const sel = $('#school');
+  if(!sel) return DEFAULT_SCHOOL;
+  if(sel.value === '__manual__'){
+    const m = $('#schoolManual');
+    return (m && m.value.trim()) ? m.value.trim() : DEFAULT_SCHOOL;
+  }
+  return String(sel.value || '').trim() || DEFAULT_SCHOOL;
+}
+function schHint(){
+  const box = $('#schoolHint'); if(!box) return;
+  const sel = $('#school');
+  if(sel && sel.value === '__manual__'){
+    const m = $('#schoolManual'), v = (m && m.value.trim()) ? m.value.trim() : '';
+    box.textContent = v ? ('手填：' + v + '（登录就按这个 schoolCode 走）') : '手填 schoolCode（登录就按这个走）';
+    return;
+  }
+  const code = sel ? String(sel.value || '').trim() : '';
+  const s = SCHOOLS.byCode[code];
+  box.textContent = !code ? '还没选学校'
+    : (s ? (schoolName(s) + ' · ' + s.code + ' · sysType=' + (s.sysType || '—')
+            + (s.lanUrl ? (' · 服务器=' + s.lanUrl) : '')
+            + (isInsideNet(s) ? ' · ⚠ 需校园网' : ''))
+         : ('手填：' + code + '（目录里没这条，登录照旧按上面「链路」跑）'));
+}
+async function loadSchools(pid){
+  try{
+    const r = await fetch('/api/schools' + (pid ? ('?provinceId=' + encodeURIComponent(pid)) : ''))
+      .then(x=>x.json());
+    const provs = r.provinces || [], rows = r.schools || [];
+    const sel = $('#prov');
+    if(sel && provs.length){
+      sel.innerHTML = provs.map(p=>'<option value="'+p.id+'">'+p.name+'</option>').join('');
+      if(pid) sel.value = String(pid);
+      else if(!sel.value && provs.length) sel.value = String(provs[0].id);
+    }
+    SCHOOLS.list = rows; SCHOOLS.byCode = {};
+    rows.forEach(s=>{ if(s.code) SCHOOLS.byCode[s.code] = s; });
+    const selSchool = $('#school');
+    if(selSchool) renderSchools(selSchool.value || '');
+    const hint = $('#schoolHint');
+    if(hint && !rows.length) hint.textContent = '该省目录里没数据' + (r.note ? ('（'+r.note+'）') : '') + ' —— 可直接手填 schoolCode';
+    else schHint();
+    const src = $('#schoolSrc');
+    if(src) src.textContent = '目录：' + String(r.source || '?').split('+').map(t=>SCH_SRC[t]||t).join(' + ')
+      + ' · ' + rows.length + ' 所'
+      + (r.note ? ('（'+r.note+'）') : '');
+  }catch(e){
+    const hint = $('#schoolHint'), src = $('#schoolSrc');
+    if(hint) hint.textContent = '目录读取失败（不影响登录，直接手填 schoolCode 即可）';
+    if(src) src.textContent = '';
+  }
+}
+if($('#prov')) $('#prov').onchange = ()=>{ if($('#schoolQ')) $('#schoolQ').value = ''; loadSchools($('#prov').value); };
+/* 「换学校」这个动作本身要记一笔（UI._schTouched）：只有**真选过学校**，服务器才跟着换。 */
+if($('#school')) $('#school').onchange = ()=>{ UI._schTouched = true; schManual(); schHint(); followSrvSchool(); warnInsideNet(); };
+if($('#schoolQ')) $('#schoolQ').oninput = ()=>{ UI._schTouched = true; renderSchools(); followSrvSchool(true); };
+if($('#schoolManual')) $('#schoolManual').oninput = ()=>{ UI._schTouched = true; schHint(); };
+if($('#base')) $('#base').oninput = srvTag;              /* 自己改「服务器」时小标签跟着变（自定义 / 目录 lan_url） */
+/* 「跑步类型」在登录页与高级栏各有一个入口，是同一个开关：谁改都同步 */
+const _syncRtype = (v)=>{ ['#lgRtype','#rtype'].forEach(sel=>{ const el=$(sel); if(el) el.value = String(v); }); };
+if($('#lgRtype')) $('#lgRtype').onchange = ()=>_syncRtype($('#lgRtype').value);
+if($('#rtype')) $('#rtype').onchange = ()=>_syncRtype($('#rtype').value);
+/* ---- 登录页「机型」下拉：目录（服务端 /api/gdfe/devices）+ 选定后固定 + 设默认 ---- */
+let DEV_CAT_ALL = [], DEV_STATE = { saved:null, dflt:null, defSaved:false };
+function syncDevice(){
+  const o = $('#dev') && $('#dev').selectedOptions[0];
+  if(!o || !o.dataset.brand) return;
+  if($('#brand')) $('#brand').value = o.dataset.brand || '';
+  if($('#model')) $('#model').value = o.dataset.model || '';
+  if($('#sys'))   $('#sys').value   = o.dataset.system || 'Android';
+  if($('#osv'))   $('#osv').value   = o.dataset.version || '';
+}
+function fillDevices(cat, saved, dflt, defSaved){
+  if(cat){ DEV_CAT_ALL = cat; DEV_STATE = { saved:saved, dflt:dflt, defSaved:defSaved }; }
+  const sel = $('#dev'); if(!sel) return;
+  const groups = {};
+  const sv = DEV_STATE.saved, df = DEV_STATE.dflt, ds = DEV_STATE.defSaved;
+  const defId = df ? (df.brand + '|' + df.model) : '';
+  const q = (($('#devSearch') && $('#devSearch').value) || '').trim().toLowerCase();
+  const list = q ? (DEV_CAT_ALL||[]).filter(d=>((d.label||'')+' '+(d.brand||'')+' '+(d.model||'')).toLowerCase().includes(q)) : (DEV_CAT_ALL||[]);
+  list.forEach(d=>{ const g = d.group || d.system || '其它'; (groups[g] = groups[g] || []).push(d); });
+  sel.innerHTML = Object.keys(groups).map(g=>
+    '<optgroup label="'+g+'">' + groups[g].map(d=>{
+      const lbl = (d.label || ((d.brand||'')+' '+(d.model||''))) + ((ds && d.id===defId) ? '（默认）' : '');
+      return '<option value="'+d.id+'" data-brand="'+d.brand+'" data-model="'+d.model
+        +'" data-system="'+d.system+'" data-version="'+d.version+'">'+lbl+'</option>';
+    }).join('') + '</optgroup>').join('');
+  const has = v => v && [...sel.options].some(o=>o.value===v);
+  const svId = (sv && sv.model) ? (sv.brand+'|'+sv.model) : '';
+  const dfId = (df && df.model) ? (df.brand+'|'+df.model) : '';
+  let pick = '';
+  if(has(svId)) pick = svId;
+  else if(has(dfId)) pick = dfId;
+  else pick = (sel.options[0] ? sel.options[0].value : '');
+  if(pick) sel.value = pick;
+  syncDevice();
+  syncDefaultBox(ds, defId);
+}
+let DEF_SAVED = false, DEF_ID = '';
+function syncDefaultBox(defSaved, defId){
+  if(defSaved !== undefined) DEF_SAVED = !!defSaved;
+  if(defId !== undefined) DEF_ID = defId || '';
+  const cb = $('#setDefault'); if(!cb) return;
+  cb.checked = DEF_SAVED && ((($('#brand')?$('#brand').value:'')+'|'+($('#model')?$('#model').value:'')) === DEF_ID);
+}
+async function loadDevices(){
+  try{
+    const dv = await fetch('/api/gdfe/devices').then(x=>x.json());
+    if(dv && dv.ok) fillDevices(dv.catalog, dv.selected, dv.default, dv.default_saved);
+  }catch(e){}
+}
+if($('#devSearch')) $('#devSearch').addEventListener('input', ()=> fillDevices(null, null, null, undefined));
+if($('#dev')) $('#dev').onchange = ()=>{
+  syncDevice(); syncDefaultBox();
+  const o = $('#dev').selectedOptions[0]; if(!o) return;
+  const dv = { brand:o.dataset.brand, model:o.dataset.model, system:o.dataset.system, version:o.dataset.version };
+  DEV_STATE.saved = dv;
+  fetch('/api/gdfe/device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dv)}).catch(()=>{});
+};
+if($('#setDefault')) $('#setDefault').onchange = async ()=>{
+  const on = $('#setDefault').checked;
+  const o = $('#dev') && $('#dev').selectedOptions[0];
+  const dv = { brand:o?o.dataset.brand:'', model:o?o.dataset.model:'', system:o?o.dataset.system:'', version:o?o.dataset.version:'', set_default:on };
+  try{
+    await fetch('/api/gdfe/device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dv)}).then(x=>x.json());
+    const d2 = await fetch('/api/gdfe/devices').then(x=>x.json());
+    if(d2 && d2.ok) fillDevices(d2.catalog, d2.selected, d2.default, d2.default_saved);
+    toast(on ? '已设为默认机型' : '已取消默认机型');
+  }catch(e){ toast('保存默认机型失败：'+e); }
+};
+/* 找不到机型：展开手填框 / 复制问 AI 的话 / 粘 JSON 自动填 / 手填后添加并选中（自加机型存本机）*/
+if($('#devHelp')) $('#devHelp').onclick = ()=>{ const b = $('#devHelpBox'); if(b) b.hidden = !b.hidden; };
+if($('#devCopy')) $('#devCopy').onclick = async ()=>{
+  try{ await navigator.clipboard.writeText($('#devPrompt').value); toast('已复制，去问 AI 吧'); }
+  catch(e){ $('#devPrompt').select(); document.execCommand('copy'); toast('已复制'); }
+};
+function fillFromJson(silent){
+  const txt = (($('#devPaste') && $('#devPaste').value) || '').trim();
+  if(!txt){ if(!silent) toast('先把 AI 回的 JSON 粘进来'); return false; }
+  let j;
+  try{ const a = txt.indexOf('{'), b = txt.lastIndexOf('}');
+       j = JSON.parse(a >= 0 && b > a ? txt.slice(a, b+1) : txt); }
+  catch(e){ if(!silent) toast('解析失败：不是合法 JSON'); return false; }
+  const pickv = (...ks)=>{ for(const k of ks){ if(j[k]!=null && String(j[k]).trim()!=='') return String(j[k]).trim(); } return ''; };
+  const brand = pickv('brand','品牌','厂商');
+  const model = pickv('model','model_code','型号代码','型号');
+  const system = pickv('system','系统','os') || 'Android';
+  const version = pickv('version','系统版本','安卓版本','android');
+  if(!brand || !model){ if(!silent) toast('JSON 里缺 brand / model'); return false; }
+  $('#dBrand').value = brand; $('#dModel').value = model;
+  $('#dSystem').value = system; $('#dVer').value = version;
+  if($('#devAddMsg')) $('#devAddMsg').textContent = '已填入：' + brand + ' ' + model + '（点「添加并选中」即可）';
+  if(!silent) toast('已填入');
+  return true;
+}
+if($('#devPaste')) $('#devPaste').addEventListener('input', ()=> setTimeout(()=> fillFromJson(true), 0));
+if($('#devFill')) $('#devFill').onclick = ()=> fillFromJson(false);
+if($('#devAdd')) $('#devAdd').onclick = async ()=>{
+  const brand = (($('#dBrand')||{}).value||'').trim(), model = (($('#dModel')||{}).value||'').trim(),
+        system = (($('#dSystem')||{}).value||'').trim() || 'Android', version = (($('#dVer')||{}).value||'').trim();
+  if(!brand || !model) return toast('品牌和型号代码都要填');
+  try{
+    await fetch('/api/gdfe/device',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ brand:brand, model:model, system:system, version:version })});
+    const d2 = await fetch('/api/gdfe/devices').then(x=>x.json());
+    if(d2 && d2.ok) fillDevices(d2.catalog, { brand:brand, model:model, system:system, version:version }, d2.default, d2.default_saved);
+    if($('#devAddMsg')) $('#devAddMsg').textContent = '已添加并选中：' + brand + ' ' + model;
+    toast('已添加并选中');
+  }catch(e){ if($('#devAddMsg')) $('#devAddMsg').textContent = '添加失败：' + e; }
+};
+
+loadSchools(11);
+
+/* 第一步：登录（只登录 + 拉设置） */
+if($('#bLogin')) $('#bLogin').onclick = async ()=>{
+  const body = { chain: ($('#chain') ? $('#chain').value : 'v1'),
+                 base: ($('#base') ? $('#base').value.trim() : ''),
+                 school_code: schPick(),
+                 username: ($('#uname') ? $('#uname').value.trim() : ''),
+                 password: ($('#upwd') ? $('#upwd').value : ''),
+                 device: params().device, app_version: params().app_version,
+                 run_type: +($('#lgRtype') ? $('#lgRtype').value
+                             : ($('#rtype') ? $('#rtype').value : 1)) };
+  const btn = $('#bLogin'); btn.disabled = true; $('#pill').textContent = '登录中…';
+  if($('#lgPill')) $('#lgPill').textContent = '登录中…';
+  try{
+    const r = await fetch('/api/stage/login',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)}).then(x=>x.json());
+    renderSteps($('#loginSteps'), r);
+    if(r.ok){
+      WIZ.sid = r.sid || ''; WIZ.login = r; WIZ.chain = body.chain; WIZ.base = r.base || body.base;
+      const inf = r.info || {};
+      WIZ.identify = inf.identify || '';
+      const who = (inf.school_name ? inf.school_name + ' / ' : '') + (inf.username || body.username);
+      $('#pill').textContent = '已登录(' + body.chain + ')';
+      if($('#lgPill')) $('#lgPill').textContent = '已登录(' + body.chain + ')';
+      const onF = v => String(v)==='1' || v===true;
+      WIZ.faceReq = { s: onF(inf.is_start_face), e: onF(inf.is_end_face),
+                      m: (onF(inf.is_mid_face) || (inf.middle_faces||[]).length),
+                      mid: (inf.middle_faces || []) };       /* 供「现在扫脸」一键填好人脸打卡栏 */
+      const faceReq = (()=>{                       /* 这所学校要不要扫脸 —— 设置里说什么就写什么 */
+        const p = [];
+        if(onF(inf.is_start_face)) p.push('开始');
+        if(onF(inf.is_end_face))   p.push('结束');
+        const mid = inf.middle_faces || [];
+        if(onF(inf.is_mid_face) || mid.length) p.push('中途×' + (mid.length || 1));
+        return p.length ? p.join(' + ') + '（faceType 1/2/3）' : '不需要';
+      })();
+      const faceSrcNote = (inf)=>{                 /* 要扫脸时，这张脸从哪来 —— 如实说 */
+        const on1 = v => String(v)==='1' || v===true;
+        if(!(on1(inf.is_start_face) || on1(inf.is_end_face) || on1(inf.is_mid_face)
+             || (inf.middle_faces||[]).length)) return '';
+        const al = inf.face_album || null;
+        if(al && al.ok) return '已从服务器取到你的<b>已注册底片</b>（'+al.count+' 张），开跑时拿它打卡（加噪后上传）——服务器的 1:1 比对才过得了。';
+        if(al && al.error) return '<b>没取到账号底片</b>（'+al.error+'）——点下面的<b>「现在扫脸」</b>（用电脑摄像头现拍一张），或到「人脸打卡」栏上传本人已注册的脸照；否则只能发占位图，真实学校会判不通过。';
+        return '当前会发<b>占位图</b>（没取到底片）——点下面的<b>「现在扫脸」</b>（用电脑摄像头现拍一张），或到「人脸打卡」栏上传本人已注册的脸照。';
+      };
+      if($('#loginSteps')) $('#loginSteps').innerHTML = ($('#loginSteps').innerHTML || '')
+        + '<div class="wizhint" id="faceReq"><b>这所学校的人脸打卡要求</b>：'+faceReq
+        +' —— 开跑时会按它自动打点。'+faceSrcNote(inf)
+        + (faceReq === '不需要' ? '' : ' <button id="faceNow" type="button">现在扫脸（用电脑摄像头）</button>')
+        + '</div>';
+      if($('#faceNow')) $('#faceNow').onclick = faceScanNow;   /* 一点就调摄像头，拍完并进「人脸照」 */
+      toast('登录成功：' + who + ' · identify=' + (inf.identify || '—')
+            + ' ｜ 人脸：' + faceReq, 5200);
+      wizGoto(2);                                /* 登录成功才进带地图的操作界面 */
+      checkToday();                              /* 登录后自动问一次：今天还能不能跑（只读） */
+      rememberAccount();                         /* 记住这次的学校 / 账号 */
+      if(rememberPwdOn()) saveCreds();           /* 勾了「记住密码」就把账号密码存本机 */
+      try{ await applyAccountInfo(inf); }catch(e){}   /* 三个模式都自动读账号信息：人脸 + 有效区域（多个弹窗选一个）*/
+    } else {
+      $('#pill').textContent = '登录失败';
+      if($('#lgPill')) $('#lgPill').textContent = '登录失败';
+      const rtOpen = r.runTypes ? Object.keys(r.runTypes)
+          .map(k=>k+'='+(String(r.runTypes[k])==='1'?'开放':'关闭')).join(' · ') : '';
+      if(rtOpen && $('#loginSteps')) $('#loginSteps').innerHTML = ($('#loginSteps').innerHTML || '')
+        + '<div class="wizhint" id="rtHint"><b>学校对三种跑步类型的开放情况</b>：'+rtOpen
+        +' —— 换上面那格「跑步类型」再登录看看。</div>';
+      toast('登录失败：' + (r.error || '看下面回执') + (rtOpen ? ' ｜ 开放情况：'+rtOpen : ''), 7000);
+    }
+  }catch(e){ toast('登录失败：' + e.message); $('#pill').textContent = '登录失败';
+             if($('#lgPill')) $('#lgPill').textContent = '登录失败'; }
+  finally{ btn.disabled = false; }
+};
+/* 退出登录：清掉 session，回到登录页（地图那边的画线/结果不动，免得误丢） */
+if($('#bHist')) $('#bHist').onclick = ()=>openHistory();
+if($('#bLogout')) $('#bLogout').onclick = ()=>{
+  WIZ.sid = ''; WIZ.login = null; WIZ.identify = '';
+  RUN_GATE.canRun = null; RUN_GATE.reason = ''; RUN_GATE.last = null;
+  { const tb = $('#todayBar'); if(tb){ tb.hidden = true; tb.className = 'todaybar'; } }
+  if(typeof onTrackPick === 'function') onTrackPick();
+  const ls = $('#loginSteps'); if(ls) ls.innerHTML = '';
+  $('#pill').textContent = '就绪';
+  if($('#lgPill')) $('#lgPill').textContent = '未登录';
+  wizGoto(1);
+  toast('已退出登录', 2000);
+};
+
+/* ============================ 生成 ============================ */
+let lastRes = null;
+function midPauses(){
+  // "0.5:20, 0.8:10" -> [{at:0.5,seconds:20},{at:0.8,seconds:10}]
+  return ($('#pause').value||'').split(/[,，;；\s]+/).filter(Boolean).map(s=>{
+    const [a,b]=s.split(/[:：]/); const at=+a, sec=+b;
+    return (isFinite(at)&&isFinite(sec)&&sec>0)?{at:Math.max(0,Math.min(0.95,at)),seconds:sec}:null;
+  }).filter(Boolean);
+}
+/* 合规设置：粘 app 的 RunRoleSetBean JSON（geofence / limitSpeed / totalRange / step…）→ 生成时逐项核对 */
+function settingFromUI(){
+  const el = $('#setjson'); const raw = el ? (el.value||'').trim() : '';
+  if(!raw) return null;
+  try{ return JSON.parse(raw); }catch(e){ return null; }        /* 填错就当没填，不挡生成 */
+}
+/* 简单模式：闭合环线自动用「跑道连续跑」，免得一圈一圈复读（高级模式按你选的那个来） */
+function effLoop(){
+  const v = $('#loop') ? $('#loop').value : 'repeat';
+  if(v === 'repeat' && UI.simple() && isRing()) return 'track';
+  return v;
+}
+function params(){
+  const fm = $('#fM').value.split(/[,，\s]+/).filter(Boolean).map(Number).filter(x=>!isNaN(x));
+  const p = {
+    points: pts.map(p=>[p.lng,p.lat]),
+    target_km: +$('#tkm').value,
+    pace_s_per_km: UI.simple() ? simplePace() : +$('#pace').value,
+    sample_interval_s: +$('#dt').value, speed_jitter: +$('#jit').value,
+    interval_jitter_s: +$('#dtjit').value,
+    warmup_s: +$('#warm').value, cooldown_s: +$('#cool').value,
+    stop_tail_s: +($('#stail') ? $('#stail').value : 33),      /* 计时停止后的人还在走收尾段（真机 ~33–40 点，c/e 冻结、i=true、不计里程） */
+    stop_walk_mps: +($('#swalk') ? $('#swalk').value : 1.5),   /* 收尾段走速 m/s */
+    gps_outage_p: +($('#outage') ? $('#outage').value : 50) / 100,   /* 每次跑步触发一次 GPS 断记的概率 */
+    mid_pauses: midPauses(),
+    pause_count: +($('#pcnt').value || 0),
+    sex: $('#sex') ? $('#sex').value : 'male',
+    stride_jitter: UI.simple() ? 0.05 : 0.0,      /* 简单模式默认「随机」而不是均匀定值 */
+    loop_mode: effLoop(), run_type: +$('#rtype').value, crs: $('#crs').value,
+    track_lateral_m: +($('#tlat') ? $('#tlat').value : 0.4),
+    track_pace_pct: +($('#tpp') ? $('#tpp').value : 3) / 100,
+    coord_jitter_deg: +($('#cjit') ? $('#cjit').value : 0) / 111320.0,   /* 界面填米、内核收度 */
+    setting: withFence(settingFromUI()),
+    device: {brand:$('#brand').value, model:$('#model').value,
+             system:($('#sys') ? $('#sys').value : 'iOS'), version:$('#osv').value},
+    start_face: $('#fS').checked, end_face: $('#fE').checked, middle_faces: fm,
+    app_version: $('#appv').value,
+  };
+  if(UI.min()){   /* 极简：断点 / 水平偏移 / 偶尔跳点 自动加上 */
+    p.gps_outage_p = 0.5;
+    p.track_lateral_m = 0.4;
+    p.coord_jitter_deg = 0.8 / 111320.0;
+  }
+  return p;
+}
+$('#bGen').onclick = async ()=>{
+  if(pts.length<2) return toast('先画至少两个点');
+  $('#pill').textContent='生成中…'; $('#bGen').disabled=true;
+  try{
+    const r = await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(params())}).then(x=>x.json());
+    if(r.error) throw new Error(r.error);
+    lastRes = r; renderResult(r); toast('已生成：'+r.metrics.point_count+' 点 / '+r.metrics.distance_m+' m');
+  }catch(e){ toast('生成失败：'+e.message); }
+  finally{ $('#bGen').disabled=false; checkLoop(); }
+};
+
+function renderResult(r){
+  const m=r.metrics, v=r.validate, ok=r.validity.isValid===1;
+  const loopBadge = r.loop_mode ? ('<div class="stat"><span>循环方式</span><b>'+r.loop_mode
+      +(r.loop_mode==='track' ? '（圈间连续 · 每圈微变）' : '')+'</b></div>') : '';
+  const chks = (r.validity && r.validity.checks) || [];
+  const chkLine = chks.length ? ('<div class="hint">合格性逐项：'+chks.map(c=>
+      '<b style="color:'+(c.ok?'var(--ok)':'var(--err)')+'">'+c.name+(c.ok?' ✓':' ✗')+'</b> '+c.detail).join('　')+'</div>') : '';
+  const fenceLine = r.geofence ? ('<div class="stat"><span>电子围栏自检</span><span class="badge '
+      +(r.geofence.ok?'ok':'err')+'">'+(r.geofence.ok?'全在围栏内':('越界 '+r.geofence.outside+' 点'))+'</span></div>') : '';
+  const sim = (r.similarity && r.similarity.best) || null;
+  const simLine = sim ? ('<div class="stat"><span>与已存轨迹最像</span><b>'+(sim.overlap*100).toFixed(0)
+      +'% · '+sim.name+'</b></div>') : '';
+  const mx = Math.max(...r.steps.buckets, 1);
+  const bars = r.steps.buckets.map(b=>`<div style="height:${Math.max(2,(b/mx)*100)}%" title="${b} 步"></div>`).join('');
+  const iss = v.issues.length ? '<ul class="issues">'+v.issues.map(i=>`<li>${i.code}: ${i.message}</li>`).join('')+'</ul>' : '';
+  const faces = r.faces.length ? r.faces.map(f=>`<div class="stat"><span>faceType ${f.type}</span><b>${f.coordinates}</b></div>`).join('') : '<div class="hint">未开启人脸打卡</div>';
+  $('#resultBox').innerHTML = `
+    <div style="margin-top:10px"></div>
+    ${loopBadge}
+    <div class="grid">
+      <div class="stat"><span>距离</span><b>${m.distance_m} m</b></div>
+      <div class="stat"><span>时长</span><b>${m.elapsed_s} s</b></div>
+      <div class="stat"><span>均速</span><b>${m.avg_speed_kmh} km/h</b></div>
+      <div class="stat"><span>配速</span><b>${m.pace}</b></div>
+      <div class="stat"><span>步数</span><b>${m.steps}</b></div>
+      <div class="stat"><span>点数</span><b>${m.point_count}</b></div>
+      <div class="stat"><span>步幅</span><b>${m.stride_m} m</b></div>
+      <div class="stat"><span>步频</span><b>${m.cadence_spm}</b></div>
+      ${m.pause_count ? `<div class="stat"><span>暂停</span><b>${m.pause_count} 点 / ${m.pause_s} s</b></div>` : ''}
+    </div>
+    <div class="stat" style="margin-top:6px"><span>轨迹自校验</span>
+      <span class="badge ${v.ok?'ok':'err'}">${v.ok?'通过':'未通过'}</span></div>
+    <div class="stat"><span>合格性 isValid</span>
+      <span class="badge ${ok?'ok':'warn'}">${r.validity.isValid}</span></div>
+    ${chkLine}${fenceLine}${simLine}
+    <div class="hint">60s 步数桶 ${r.metrics.bucket_count} 个，合计 ${r.steps.total_steps} 步</div>
+    <div id="steps">${bars}</div>
+    ${iss}
+    <div class="btns" style="margin-top:8px"><button id="bUsePath" style="width:100%">结果 → 可编辑（可整条拖动对齐）</button></div>
+    <h2 style="margin-top:10px">人脸点</h2>${faces}`;
+  drawResult(r);
+  const bu = $('#bUsePath'); if(bu) bu.onclick = usePathAsPts;
+}
+/* 把生成结果的轨迹灌回画布（之后就能整体拖动 / 方向键微调 / 整理路径） */
+function usePathAsPts(){
+  if(!lastRes || !lastRes.path_used || !lastRes.path_used.length) return toast('先生成轨迹');
+  dropConfirmedForNew();                 /* 载入生成结果 = 开新的一条 */
+  pushHist();
+  pts = lastRes.path_used.map(p=>({lat:p[1], lng:p[0]}));     /* path_used 是 [lng,lat]，WGS-84 */
+  setAnchor();
+  redraw(); setMode('move');
+  if(pts.length>1){ const mm = pts.map(p=>{ const m=toMap(p); return [m.lat,m.lng]; });
+    map.fitBounds(L.latLngBounds(mm).pad(0.2)); }
+  toast('已载入 '+pts.length+' 点到画布 → 现在可整条拖动对齐');
+}
+function drawResult(r){
+  if(genLine){ map.removeLayer(genLine); genLine=null; }
+  faceMarks.forEach(m=>map.removeLayer(m)); faceMarks=[];
+  /* path_used 是 [lng,lat]（WGS-84），按当前底图坐标系换算后绘制 */
+  const used = r.path_used.map(p=>{ const m = toMap({lat:p[1],lng:p[0]}); return [m.lat,m.lng]; });
+  genLine = L.polyline(used,{color:'#2fbf71',weight:3,opacity:.85,dashArray:'6 5'}).addTo(map);
+  L.circleMarker(used[0],{radius:6,color:'#2fbf71',fillColor:'#2fbf71',fillOpacity:1}).addTo(map).bindPopup('起点');
+  r.faces.forEach(f=>{
+    /* disp 是服务端给的 WGS-84 显示坐标；没 disp 时 latitude/longitude 已是导出坐标系(GCJ)，直接用 */
+    const ll = f.disp ? (()=>{ const m = toMap({lat:f.disp[0], lng:f.disp[1]}); return [m.lat,m.lng]; })()
+                      : [f.latitude, f.longitude];
+    const mk = L.marker(ll,{icon:L.divIcon({className:'face',html:'📷',iconSize:[18,18]})})
+      .bindPopup('faceType '+f.type+'<br>'+f.coordinates).addTo(map);
+    faceMarks.push(mk);
+  });
+  if(used.length>1) map.fitBounds(L.latLngBounds(used).pad(0.15));
+}
+
+/* ============================ 导出 / 提交 ============================ */
+function download(name, obj){
+  const blob = new Blob([JSON.stringify(obj,null,1)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+}
+$('#bJson').onclick = ()=>{ if(!lastRes) return toast('先生成'); download('track.json', {
+  metrics:lastRes.metrics, validity:lastRes.validity, steps:lastRes.steps, faces:lastRes.faces,
+  track_legacy:lastRes.track_legacy, track_pointdata:lastRes.track_pointdata, submit:lastRes.submit,
+}); toast('已下载 track.json'); };
+
+/* 从 /api/routes/load 的返回里取点。存盘帧以 `points_crs` 为准：
+   - 'gcj02' → 逐点 gcj→wgs 换算（外部/旧脚本文件真的是 GCJ）；
+   - 'wgs84' / 缺省 → 原样（内部一律 WGS-84，也是 UI 存盘的真实帧）。
+   旧文件（无 points_crs）却标着 params.crs=gcj02 的 —— 帧不可信，一律按 WGS 载入并提一句。*/
+function ptsFromRoute(d){
+  d = d || {};
+  let p = (d.points||[]).map(q=>({lat:q.lat, lng:q.lng}));
+  const pc = String(d.points_crs||'').toLowerCase();
+  if(pc === 'gcj02'){ p = p.map(q=>GEO.gcj02ToWgs84(q)); toast('该文件标了 GCJ-02 存盘帧 → 已换算成 WGS-84 载入'); }
+  else if(!pc && d.params && String(d.params.crs||'').toLowerCase()==='gcj02' && p.length){
+    toast('这个旧文件没记存储坐标口径，已按原样载入；如果有偏移，重新生成一条即可', 5600);
+  }
+  return p;
+}
+$('#bSave').onclick = async ()=>{
+  const name = prompt('路线名', 'route-'+new Date().toISOString().slice(0,16).replace(/[:T]/g,''));
+  if(!name) return;
+  const r = await fetch('/api/routes/save',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name, points: pts, params: params()})}).then(x=>x.json());
+  if(r.ok) confirmedUnsaved = false;         /* 存下来了 ⇒ 不再「未保存」 */
+  toast(r.ok? ('已保存 '+r.id) : '保存失败');
+};
+$('#bLoad').onclick = async ()=>{
+  const r = await fetch('/api/routes').then(x=>x.json());
+  if(!r.routes.length) return toast('还没有保存的路线');
+  const id = prompt('载入哪条？\n'+r.routes.map(x=>x.id+'  ('+x.points+'点)').join('\n'), r.routes[0].id);
+  if(!id) return;
+  const d = await fetch('/api/routes/load?id='+encodeURIComponent(id)).then(x=>x.json());
+  if(d.error) return toast('没有这条');
+  dropConfirmedForNew();                 /* 载入 = 开新的一条 */
+  pts = ptsFromRoute(d); setAnchor(); redraw();
+  if(d.params) applyParams(d.params); toast('已载入 '+d.name);
+};
+function applyParams(p){
+  if(p.target_km!=null)$('#tkm').value=p.target_km;
+  if(p.pace_s_per_km!=null){ $('#pace').value=p.pace_s_per_km; syncSimpleFromPace(); }
+  if(p.sex!=null && $('#sex')) $('#sex').value=p.sex;
+  if(p.pause_count!=null && $('#pcnt')) $('#pcnt').value=p.pause_count;
+  if(p.loop_mode)$('#loop').value=p.loop_mode;
+  if(p.track_lateral_m!=null && $('#tlat')) $('#tlat').value=p.track_lateral_m;
+  if(p.track_pace_pct!=null && $('#tpp')) $('#tpp').value=+(p.track_pace_pct*100).toFixed(1);
+  if(p.coord_jitter_deg!=null && $('#cjit')) $('#cjit').value=+(p.coord_jitter_deg*111320).toFixed(2);
+  if($('#setjson')) $('#setjson').value = p.setting ? JSON.stringify(p.setting) : '';
+  if(p.crs)$('#crs').value=p.crs;
+  if(p.warmup_s!=null)$('#warm').value=p.warmup_s;
+  if(p.cooldown_s!=null)$('#cool').value=p.cooldown_s;
+  if(p.interval_jitter_s!=null)$('#dtjit').value=p.interval_jitter_s;
+  if(p.sample_interval_s!=null)$('#dt').value=p.sample_interval_s;
+  if(p.speed_jitter!=null)$('#jit').value=p.speed_jitter;
+  if(Array.isArray(p.mid_pauses)) $('#pause').value = p.mid_pauses.map(x=>x.at+':'+x.seconds).join(', ');
+  if(p.device){ $('#brand').value=p.device.brand||''; $('#model').value=p.device.model||'';
+    if($('#sys') && p.device.system) $('#sys').value=p.device.system;
+    $('#osv').value=p.device.version||''; }
+}
+/* ---------------------------- GPX 导入 / 导出 ---------------------------- */
+$('#bGpxIn').onclick = ()=>$('#gpxFile').click();
+$('#gpxFile').onchange = async (ev)=>{
+  const f = ev.target.files[0]; if(!f) return;
+  const gpx = await f.text();
+  const name = (f.name||'import').replace(/\.gpx$/i,'');
+  const r = await fetch('/api/routes/import',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({gpx, name, params: params()})}).then(x=>x.json());
+  ev.target.value='';
+  if(!r.ok) return toast('导入失败：'+(r.error||'?'));
+  dropConfirmedForNew();                 /* 导入 = 开新的一条 */
+  pts = (r.points||[]).map(p=>({lat:p[1],lng:p[0]}));
+  setAnchor();
+  if(pts.length) map.fitBounds(L.latLngBounds(pts.map(p=>[p.lat,p.lng])).pad(0.15));
+  redraw(); toast('已导入 '+r.count+' 点（'+r.length_m+' m）');
+};
+$('#bGpxOut').onclick = async ()=>{
+  if(!pts.length) return toast('先画线');
+  const name = prompt('路线名', 'route-'+new Date().toISOString().slice(0,10));
+  if(!name) return;
+  const sv = await fetch('/api/routes/save',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name, points: pts, params: params()})}).then(x=>x.json());
+  if(!sv.ok) return toast('保存失败');
+  const crs = $('#crs') ? ($('#crs').value||'wgs84') : 'wgs84';
+  window.open('/api/routes/export?id='+encodeURIComponent(sv.id)+'&crs='+encodeURIComponent(crs), '_blank');
+  toast('已导出 GPX（'+crs+'）');
+};
+$('#bSubmit').onclick = async ()=>{
+  if(!lastRes) return toast('先生成');
+  const base=$('#base').value.trim();
+  const chain=$('#chain')?($('#chain').value||'v1'):'v1';
+  const payload={base, chain,
+    school_code: schPick(),
+    username: $('#uname')?$('#uname').value.trim():'20210001',
+    password: $('#upwd')?$('#upwd').value:'mock-pass'};
+  if(chain==='v2'){ payload.gen = lastRes; payload.run_type = parseInt($('#rtype')?$('#rtype').value:1)||1; }
+  else { payload.form = lastRes.submit; }
+  $('#pill').textContent='提交中…';
+  const r = await fetch('/api/submit',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)}).then(x=>x.json());
+  $('#out').textContent = JSON.stringify(r,null,1);
+  $('#pill').textContent = r.ok? ('已提交('+chain+')') : '提交失败';
+  toast(r.ok? ('已提交到 mock（'+chain+'）') : ('提交失败：'+(r.error||'')));
+};
+const _syncChain = ()=>{
+  const isV2 = $('#chain') && $('#chain').value==='v2';
+  ['#rowSchool','#rowCred'].forEach(s=>{ const el=$(s); if(el) el.style.display = isV2?'':'none'; });
+};
+if($('#chain')){ $('#chain').onchange=()=>{ UI._chainTouched = true; _syncChain(); syncSrv(); }; _syncChain(); }
+
+/* ============================ 初始化 ============================ */
+(async ()=>{
+  let _edition = 'lite';
+  try{
+    const cfg = await fetch('/api/config').then(x=>x.json());
+    _edition = (cfg.edition === 'full') ? 'full' : 'lite';
+    if(cfg.center){ map.setView([cfg.center.lat,cfg.center.lng],15); }
+    const d = cfg.defaults||{};
+    $('#tkm').value=d.target_km; $('#pace').value=d.pace_s_per_km; $('#dt').value=d.sample_interval_s;
+    $('#jit').value=d.speed_jitter; $('#loop').value=d.loop_mode;
+    _syncRtype(d.run_type||1);   /* 服务端给的默认「跑步类型」两个入口一起设：别让高级栏残留 2（晨跑）偷偷生效 */
+    if(d.device){ $('#brand').value=d.device.brand; $('#model').value=d.device.model;
+      if($('#sys') && d.device.system) $('#sys').value=d.device.system;
+      $('#osv').value=d.device.version; }
+    if(d.app_version)$('#appv').value=d.app_version;
+    if(d.track_lateral_m!=null && $('#tlat')) $('#tlat').value=d.track_lateral_m;
+    if(d.track_pace_pct!=null && $('#tpp')) $('#tpp').value=+(d.track_pace_pct*100).toFixed(1);
+  }catch(e){ /* 离线也能画 */ }
+  await loadDevices();           /* 登录页「机型」下拉：读服务端目录 + 上次选定/默认 */
+  UI.init(_edition);             /* 按 exe 名定「精简版 / 完整版」 */
+  redraw();
+  setMode(UI.simple() ? 'pan' : 'add');   /* 打开就能按住左键拖地图（简单模式原来落「自由手绘」，左键被画线吃掉） */
+  updateLapInfo();
+  syncSimpleFromPace();          /* 分:秒 ↔ 秒/km 两侧同步 + 步长读数 */
+  updateStrideReadout();
+  refreshTracks();
+  initTiles();          /* 必须等 pts 等变量声明完再跑：useTiles() 里要碰 pts */
+
+  /* 两屏：默认落在「登录页」（#app 是 locked 的） */
+  syncSrv();
+  restoreAccount();              /* 恢复上次的账号（不存密码）*/
+  loadRemembered();              /* 若有「记住密码」则回填账号+密码 */
+  wizGoto(1);
+})();
+</script>
+</body>
+</html>

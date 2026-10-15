@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>广财阳光跑</title>
+<style>
+  :root{--bg:#0f1115;--panel:#171a21;--panel2:#1e222b;--line:#2a2f3a;
+        --text:#e7ebf3;--muted:#8b94a6;--accent:#2fbf71;--accent2:#1f8f52;
+        --err:#e5484d;--warn:#e0a83a;--radius:12px}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--text);
+       font:14px/1.5 -apple-system,"Segoe UI","Microsoft YaHei",Roboto,sans-serif;
+       display:flex;justify-content:center;align-items:flex-start;min-height:100%}
+  .wrap{width:100%;max-width:480px;padding:26px 20px 40px}
+  h1{font-size:22px;margin:0 0 2px;letter-spacing:.5px}
+  .sub{color:var(--muted);font-size:12px;margin-bottom:18px}
+  .sub b{color:var(--text)}
+  .sub .real{color:var(--warn)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+        padding:16px;margin-bottom:14px}
+  .field{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0}
+  .field+.field{border-top:1px solid var(--line)}
+  .field>label{color:var(--muted);white-space:nowrap;flex:0 0 auto}
+  select,input{background:var(--panel2);color:var(--text);border:1px solid var(--line);
+       border-radius:8px;padding:8px 10px;font:inherit;outline:none}
+  select{flex:1 1 auto;min-width:0;max-width:64%} input[type=number]{width:78px;text-align:center}
+  input[type=text],input[type=password]{min-width:168px;text-align:left}
+  input[type=checkbox]{width:18px;height:18px;min-width:18px;padding:0;accent-color:var(--accent)}
+  input:focus,select:focus{border-color:var(--accent)}
+  textarea{background:var(--panel2);color:var(--text);border:1px solid var(--line);
+      border-radius:8px;padding:8px 10px;font:inherit;outline:none;width:100%;resize:vertical}
+  textarea:focus{border-color:var(--accent)}
+  .pace{display:flex;align-items:center;gap:6px;color:var(--muted)}
+  #go,#loginBtn{width:100%;padding:14px;border:0;border-radius:var(--radius);cursor:pointer;
+      font-size:17px;font-weight:600;color:#04120a;
+      background:linear-gradient(180deg,var(--accent),var(--accent2));
+      transition:filter .15s}
+  #loginBtn{padding:12px;font-size:16px;margin-top:6px}
+  #go:hover,#loginBtn:hover{filter:brightness(1.07)}
+  #go:disabled,#loginBtn:disabled{filter:grayscale(.6) brightness(.7);cursor:default}
+  .acts{display:flex;gap:10px;margin-top:10px}
+  .acts button{flex:1;padding:10px;border:1px solid var(--line);border-radius:10px;
+      background:var(--panel2);color:var(--text);font:inherit;cursor:pointer}
+  .acts #stopUp{color:var(--accent);border-color:var(--accent2)}
+  .acts .danger{color:var(--err);border-color:#5b2225}
+  .acts button:hover{filter:brightness(1.2)}
+  .acts button:disabled{filter:grayscale(.6) brightness(.7);cursor:default}
+  .hint.warn{color:var(--warn)}
+  details{margin-top:12px} summary{cursor:pointer;color:var(--muted);font-size:12px}
+  details .field{margin-top:6px}
+  .stat{display:flex;justify-content:space-between;padding:4px 0;font-variant-numeric:tabular-nums}
+  .stat span:first-child{color:var(--muted)}
+  progress{width:100%;height:9px;margin:8px 0;-webkit-appearance:none;appearance:none}
+  progress::-webkit-progress-bar{background:var(--panel2);border-radius:6px}
+  progress::-webkit-progress-value{background:var(--accent);border-radius:6px}
+  .hint{color:var(--muted);font-size:12px;margin-top:6px}
+  a{color:var(--accent);text-decoration:underline;font-weight:600;cursor:pointer}
+  a:hover{filter:brightness(1.18)}
+  #steps div{display:flex;gap:8px;padding:5px 0;font-size:12.5px;border-bottom:1px dashed var(--line)}
+  #steps .ok{color:var(--accent)} #steps .no{color:var(--err)}
+  #steps .nm{min-width:150px;color:var(--text)}
+  #steps .dt{color:var(--muted);flex:1}
+  .verdict{padding:10px 12px;border-radius:10px;margin-top:8px;font-weight:600}
+  .verdict.ok{background:rgba(47,191,113,.14);color:var(--accent);border:1px solid var(--accent2)}
+  .verdict.no{background:rgba(229,72,77,.14);color:var(--err);border:1px solid #5b2225}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);
+      background:#000c;border:1px solid var(--line);border-radius:10px;padding:10px 16px;
+      font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;max-width:88%}
+  .toast.on{opacity:1}
+  .spin{display:inline-block;width:11px;height:11px;border:2px solid var(--muted);
+      border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;margin-right:6px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>广财阳光跑</h1>
+  <div class="sub">广东财经大学 · 广州校区田径场</div>
+
+  <!-- 1) 登录 -->
+  <div class="card" id="loginCard">
+    <div class="field"><label>账号</label>
+      <input id="user" type="text" autocomplete="username" placeholder="学号 / 账号"></div>
+    <div class="field"><label>密码</label>
+      <input id="pass" type="password" autocomplete="current-password" placeholder="密码"></div>
+    <div class="field"><label>机型</label>
+      <input id="devSearch" type="search" placeholder="搜索机型（品牌 / 型号代码）" autocomplete="off">
+      <select id="dev" title="选定后固定不变（一个账号 = 一台机）"></select></div>
+    <div class="hint">建议使用你平常使用的那台机型。</div>
+    <div class="field"><label>设为默认机型</label>
+      <span class="pace"><input id="setDefault" type="checkbox"></span></div>
+    <div class="hint">勾选「设为默认」后，下次打开就用它（一个账号固定一台机，别乱跳）。</div>
+    <div class="hint">找不到自己的机型？<a href="javascript:void(0)" id="devHelp">点这里手填 / 让 AI 帮你查</a></div>
+    <div id="devHelpBox" hidden>
+      <div class="hint">把下面这句发给 DeepSeek（或任意 AI），把【】里换成你的手机名，它会回一行 JSON：</div>
+      <textarea id="devPrompt" rows="3" readonly>请帮我查一下【我的手机型号】的安卓机型代码（ro.product.model，例如 23127PN0CC），以及品牌英文名（例如 Xiaomi）、系统（Android）、当前常见的安卓大版本号。记得开启联网搜索（如果有的话）核对。只回一行 JSON：{"brand":"","model":"","system":"Android","version":""}</textarea>
+      <div class="acts"><button type="button" id="devCopy">复制这句话</button></div>
+      <div class="hint">把 AI 回的那行 JSON 粘到下面（会自动填好上面的四个框）：</div>
+      <textarea id="devPaste" rows="2" placeholder='{"brand":"Xiaomi","model":"23127PN0CC","system":"Android","version":"15"}'></textarea>
+      <div class="acts"><button type="button" id="devFill">一键填入</button></div>
+      <div class="field"><label>品牌</label><input id="dBrand" type="text" placeholder="Xiaomi"></div>
+      <div class="field"><label>型号代码</label><input id="dModel" type="text" placeholder="23127PN0CC"></div>
+      <div class="field"><label>系统</label><input id="dSystem" type="text" value="Android"></div>
+      <div class="field"><label>系统版本</label><input id="dVer" type="text" placeholder="15"></div>
+      <div class="acts"><button type="button" id="devAdd">添加并选中</button></div>
+      <div class="hint" id="devAddMsg"></div>
+    </div>
+    <div class="field"><label>记住账号密码</label>
+      <span class="pace"><input id="remember" type="checkbox" checked></span></div>
+    <button id="loginBtn">登 录</button>
+    <div class="hint" id="loginMsg">登录后才能开跑。</div>
+  </div>
+
+  <!-- 2) 开跑（登录后可见） -->
+  <div id="afterLogin" hidden>
+    <div class="card" id="blockCard" hidden></div>
+    <div class="card">
+      <div class="field"><label>性别</label>
+        <select id="sex"><option value="male">男</option><option value="female">女</option></select></div>
+      <div class="field"><label>距离 / km</label>
+        <input id="dist" type="number" min="0" max="8" step="0.5" value="2.00"></div>
+      <div class="field"><label>配速 / km</label>
+        <span class="pace"><input id="pMin" type="number" min="3" max="12" step="1" value="6">分
+          <input id="pSec" type="number" min="0" max="59" step="1" value="0">秒</span></div>
+      <div class="hint" id="rangeHint"></div>
+    </div>
+
+    <button id="go">开 跑</button>
+    <div class="hint warn" id="runTip" hidden>⚠ 开跑 / 上传之后的一段时间内，建议先不要在本账号的手机 App 上登录（避免记录 / 设备异常）。</div>
+
+    <div class="card" id="prog" hidden>
+      <div class="stat"><span id="phase"><span class="spin"></span>准备…</span><b id="timer">—</b></div>
+      <progress id="bar" value="0" max="100"></progress>
+      <div class="stat"><span>预计剩余</span><b id="eta">—</b></div>
+      <div class="hint" id="pos">—</div>
+      <div class="acts">
+        <button type="button" id="stopUp">停止并上传</button>
+        <button type="button" id="stopDrop" class="danger">停止不上传</button>
+      </div>
+      <div class="hint" id="upTip" hidden>⏳ 正在跑并上传…… 在出现「上传成功 / 失败」的结果之前，请不要关闭本页面。</div>
+    </div>
+
+    <div class="card" id="resCard" hidden>
+      <div id="verdict"></div>
+      <div id="steps"></div>
+    </div>
+
+    <div class="card" id="histCard">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <b>历史记录</b>
+        <button type="button" id="histBtn" style="padding:6px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--text);font:inherit;cursor:pointer">查询历史</button>
+      </div>
+      <div class="hint" id="histMsg">读回你这账号近期的跑步记录（只读，不上传任何东西）。</div>
+      <div id="histList"></div>
+    </div>
+
+    <details>
+      <summary>高级设置</summary>
+      <div class="field"><label>道次</label>
+        <select id="laneSel">
+          <option value="0">随机</option>
+          <option value="1">第 1 道</option>
+          <option value="2">第 2 道</option>
+          <option value="3">第 3 道</option>
+          <option value="4">第 4 道</option>
+        </select></div>
+      <div class="hint">起点每次随机，方向固定逆时针。「随机」= 开跑时从第 1–4 道自动抽一道；也可指定第 1–4 道。开跑会把记录提交到学校服务器，一天只能合格一次。</div>
+    </details>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="/static/geo.js"></script>
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const CENTER = { lat: 23.0937093, lng: 113.3528926 };   /* 广财广州 田径场中心（由已知合格线路反推） */
+const DEVICE_DEFAULT = { brand:"iPhone", model:"iPhone 14 Pro Max", system:"iOS", version:"26.6.1" };
+let DEVICE = Object.assign({}, DEVICE_DEFAULT);   /* 上传时上报的机型（下拉选定后固定）*/
+const APP_VER = "3.6.814";
+let CFG = null, RUN = { job:"", sid:"" }, BASE = "", LOGGED = false;
+const SRV = (new URLSearchParams(location.search).get('srv') || 'real').toLowerCase();
+let LANE = 1;   /* 本轮实际道次（开跑时确定：随机则抽一道） */
+
+function toast(m, ms){ const t=$('#toast'); t.textContent=m; t.classList.add('on');
+  clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('on'), ms||3600); }
+function fmtMS(ms){ ms=Math.max(0,ms|0); const s=Math.floor(ms/1000);
+  return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+function randLane(){ return 1 + Math.floor(Math.random()*4); }   /* 1–4 道随机 */
+function paceSec(){ return Math.max(0, (+$('#pMin').value||0)*60 + (+$('#pSec').value||0)); }
+
+let LANE_SEL = 0;           /* 道次：0 = 随机（开跑时抽一道）；1..4 = 固定第 N 道 */
+
+function distNum(){ return +$('#dist').value || 0; }
+
+function rangeHint(){       /* 填写时的里程提示（多跑 / 少跑） */
+  const km = distNum(), el = $('#rangeHint');
+  if(km > 3.0){ el.className = 'hint warn';
+    el.textContent = '> 3 km：单次最多计入 3 km（多跑的里程不计）。'; }
+  else if(km > 0 && km < 0.8){ el.className = 'hint warn';
+    el.textContent = '< 0.8 km：不足单次有效下限，可能不计入当天有效成绩。'; }
+  else { el.className = 'hint'; el.textContent = ''; }
+}
+function nudge(el, d){      /* 上下键：一律「当前值 ± 固定步长」，不受 min 锚点影响 */
+  const lo = isFinite(+el.min) ? +el.min : 0;
+  const hi = isFinite(+el.max) ? +el.max : 1e9;
+  el.value = String(Math.min(hi, Math.max(lo, +((+el.value || 0) + d).toFixed(2))));
+  rangeHint();
+}
+$('#dist').oninput = ()=>rangeHint();
+/* 覆盖原生 spinner：原生步进以 min 为锚点（min=0.1、step=0.5 时 2.00 的第一次上键只到 2.1），改为一律 ±0.5 */
+$('#dist').addEventListener('keydown', ev=>{
+  if(ev.key === 'ArrowUp'){ ev.preventDefault(); nudge($('#dist'),  0.5); }
+  else if(ev.key === 'ArrowDown'){ ev.preventDefault(); nudge($('#dist'), -0.5); }
+});
+
+/* 道次：0 = 随机（开跑时抽一道），1..4 = 固定 */
+function setLane(v){ LANE_SEL = Math.max(0, Math.min(4, v|0)); $('#laneSel').value = String(LANE_SEL); }
+$('#laneSel').onchange = ()=>setLane(+$('#laneSel').value || 0);
+
+async function api(path, body){
+  const r = await fetch(path, { method:'POST', headers:{'Content-Type':'application/json'},
+                                body: JSON.stringify(body||{}) });
+  return r.json();
+}
+
+/* ---------------- 机型（下拉，选定后固定） ---------------- */
+function syncDevice(){
+  const o = $('#dev').selectedOptions[0];
+  if(!o || !o.dataset.brand) return;
+  DEVICE = { brand:o.dataset.brand, model:o.dataset.model, system:o.dataset.system, version:o.dataset.version };
+}
+let DEV_CAT_ALL = [], DEV_STATE = { saved:null, dflt:null, defSaved:false };
+function fillDevices(cat, saved, dflt, defSaved){
+  if(cat){ DEV_CAT_ALL = cat; DEV_STATE = { saved:saved, dflt:dflt, defSaved:defSaved }; }
+  const sel = $('#dev'), groups = {};
+  const { saved:sv, dflt:df, defSaved:ds } = DEV_STATE;
+  const defId = df ? (df.brand+'|'+df.model) : '';
+  const q = (($('#devSearch') && $('#devSearch').value) || '').trim().toLowerCase();
+  const list = q ? (DEV_CAT_ALL||[]).filter(d=>((d.label||'')+' '+(d.brand||'')+' '+(d.model||'')).toLowerCase().includes(q)) : (DEV_CAT_ALL||[]);
+  list.forEach(d=>{ const g = d.group || d.system || '其它';
+                     (groups[g] = groups[g] || []).push(d); });
+  sel.innerHTML = Object.keys(groups).map(g=>
+    '<optgroup label="'+g+'">' + groups[g].map(d=>{
+      const lbl = d.label + ((ds && d.id===defId) ? '（默认）' : '');
+      return '<option value="'+d.id+'" data-brand="'+d.brand+'" data-model="'+d.model
+      +'" data-system="'+d.system+'" data-version="'+d.version+'">'+lbl+'</option>';
+    }).join('') + '</optgroup>').join('');
+  const curId = (DEVICE.brand && DEVICE.model) ? (DEVICE.brand+'|'+DEVICE.model) : '';
+  const has = v => v && [...sel.options].some(o=>o.value===v);
+  let pick = '';
+  if(has(curId)) pick = curId;
+  else {
+    const want = (ds && df) ? df : ((sv && sv.model) ? sv : df);
+    const wid = want ? (want.brand+'|'+want.model) : '';
+    pick = has(wid) ? wid : (sel.options[0] ? sel.options[0].value : '');
+  }
+  if(pick) sel.value = pick;
+  syncDevice();
+  syncDefaultBox(ds, defId);
+}
+$('#devSearch').addEventListener('input', ()=> fillDevices(null, null, null, undefined));
+let DEF_SAVED = false, DEF_ID = '';
+function syncDefaultBox(defSaved, defId){
+  if(defSaved !== undefined) DEF_SAVED = !!defSaved;
+  if(defId !== undefined) DEF_ID = defId || '';
+  $('#setDefault').checked = DEF_SAVED && (DEVICE.brand+'|'+DEVICE.model) === DEF_ID;
+}
+$('#dev').onchange = ()=>{ syncDevice(); syncDefaultBox(); api('/api/gdfe/device', DEVICE).catch(()=>{}); };
+$('#setDefault').onchange = async ()=>{
+  const on = $('#setDefault').checked;
+  try{
+    const r = await api('/api/gdfe/device', Object.assign({}, DEVICE, {set_default:on}));
+    if(r && r.default){ DEF_SAVED = !!r.default_saved; DEF_ID = r.default.brand+'|'+r.default.model; }
+    const dv = await fetch('/api/gdfe/devices').then(x=>x.json());
+    if(dv && dv.ok) fillDevices(dv.catalog, dv.selected, dv.default, dv.default_saved);
+    toast(on ? '已设为默认' : '已取消默认');
+  }catch(e){ toast('保存默认失败：'+e); }
+};
+
+/* 找不到机型：展开手填框 / 复制问 AI 的话 / 手填后添加并选中（自加机型存本机，下次仍在）*/
+$('#devHelp').onclick = ()=>{ const b = $('#devHelpBox'); b.hidden = !b.hidden; };
+$('#devCopy').onclick = async ()=>{
+  try{ await navigator.clipboard.writeText($('#devPrompt').value); toast('已复制，去问 AI 吧'); }
+  catch(e){ $('#devPrompt').select(); document.execCommand('copy'); toast('已复制'); }
+};
+/* 粘贴 AI 回的 JSON -> 自动填四个框（容忍 ```json 包裹 / 前后废话 / 中文字段名）*/
+function fillFromJson(silent){
+  const txt = ($('#devPaste').value || '').trim();
+  if(!txt){ if(!silent) toast('先把 AI 回的 JSON 粘进来'); return false; }
+  let j;
+  try{
+    const a = txt.indexOf('{'), b = txt.lastIndexOf('}');
+    j = JSON.parse(a>=0 && b>a ? txt.slice(a, b+1) : txt);
+  }catch(e){ if(!silent) toast('解析失败：不是合法 JSON'); return false; }
+  const pick = (...ks)=>{ for(const k of ks){ if(j[k]!=null && String(j[k]).trim()!=='') return String(j[k]).trim(); } return ''; };
+  const brand = pick('brand','品牌','厂商');
+  const model = pick('model','model_code','型号代码','型号');
+  const system = pick('system','系统','os') || 'Android';
+  const version = pick('version','系统版本','安卓版本','android');
+  if(!brand || !model){ if(!silent) toast('JSON 里缺 brand / model'); return false; }
+  $('#dBrand').value = brand; $('#dModel').value = model;
+  $('#dSystem').value = system; $('#dVer').value = version;
+  $('#devAddMsg').textContent = '已填入：' + brand + ' ' + model + '（点「添加并选中」即可）';
+  if(!silent) toast('已填入');
+  return true;
+}
+$('#devPaste').addEventListener('input', ()=> setTimeout(()=> fillFromJson(true), 0));
+$('#devFill').onclick = ()=> fillFromJson(false);
+$('#devAdd').onclick = async ()=>{
+  const brand=$('#dBrand').value.trim(), model=$('#dModel').value.trim(),
+        system=$('#dSystem').value.trim()||'Android', version=$('#dVer').value.trim();
+  if(!brand || !model) return toast('品牌和型号代码都要填');
+  try{
+    await api('/api/gdfe/device', {brand:brand, model:model, system:system, version:version});
+    const dv = await fetch('/api/gdfe/devices').then(x=>x.json());
+    if(dv && dv.ok) fillDevices(dv.catalog, {brand:brand, model:model, system:system, version:version}, dv.default, dv.default_saved);
+    $('#devAddMsg').textContent = '已添加并选中：' + brand + ' ' + model;
+    toast('已添加并选中');
+  }catch(e){ $('#devAddMsg').textContent = '添加失败：' + e; }
+};
+
+function renderSteps(r){
+  const steps = (r && r.steps) || [];
+  $('#steps').innerHTML = steps.map(s =>
+    '<div><span class="'+(s.ok?'ok':'no')+'">'+(s.ok?'✓':'✗')+'</span>'
+    + '<span class="nm">'+ (s.name||'') +'</span>'
+    + '<span class="dt">'+ (s.detail||'') +'</span></div>').join('');
+}
+
+/* ---------------- 登录 ---------------- */
+async function doLogin(){
+  const btn = $('#loginBtn');
+  const username = $('#user').value.trim();
+  const password = $('#pass').value;
+  if(!username) return toast('请填账号');
+  if(!password) return toast('请填密码');
+  btn.disabled = true; $('#loginMsg').innerHTML = '<span class="spin"></span>登录中…';
+  try{
+    const lg = await api('/api/gdfe/login',
+      { server:SRV, username:username, password:password, run_type:1, device:DEVICE, app_version:APP_VER });
+    if(!lg.ok){ $('#loginMsg').textContent = '登录失败：' + (lg.error || '看网上回执'); toast('登录失败'); return; }
+    RUN.sid = lg.sid || ''; BASE = lg.base || '';
+    /* 只对「真服」记账号密码；本地 mock 自测绝不碰本机「记住的」（否则会把测试账号写进真实存储）*/
+    if(SRV === 'real'){
+      if($('#remember').checked){ await api('/api/gdfe/creds', { username:username, password:password }); }
+      else { await api('/api/gdfe/creds', { action:'clear' }); }
+    }
+    LOGGED = true;
+    $('#loginMsg').textContent = '';
+    $('#loginCard').hidden = true; $('#afterLogin').hidden = false;
+    /* 登录成功但「配置」没拿到（多半今日已达标 / 该类跑步未开放）→ 不卡登录，卡在「开跑」 */
+    if(lg.set_ok === false){
+      $('#blockCard').hidden = false;
+      $('#blockCard').innerHTML = '<div class="verdict no">⚠ 今天暂时不能开跑</div>'
+        + '<div class="hint">服务器说：' + (lg.set_msg || '没给到跑步配置')
+        + '。如果今天已经跑过并达标，明天再来；否则稍后重试登录。</div>';
+      $('#go').disabled = true;
+      toast('登录成功 · 今日暂不能开跑');
+    } else {
+      $('#blockCard').hidden = true; $('#blockCard').innerHTML = ''; $('#go').disabled = false;
+      toast('登录成功');
+    }
+    rangeHint();
+  }catch(e){ $('#loginMsg').textContent = '出错：' + (e.message||e); }
+  finally{ btn.disabled = false; }
+}
+$('#loginBtn').onclick = doLogin;
+$('#pass').onkeydown = e => { if(e.key === 'Enter') doLogin(); };
+
+/* ---------------- 开跑 ---------------- */
+$('#go').onclick = async ()=>{
+  const btn = $('#go');
+  if(btn.disabled) return;
+  if(RUN.job){ toast('正在跑，稍候…'); return; }
+  const lane = LANE_SEL >= 1 ? LANE_SEL : randLane();
+  const pace = paceSec();
+  const sex  = $('#sex').value;
+  const km = distNum();
+
+  if(pace < 180 || pace > 900) return toast('配速填 3:00–15:00 /km');
+  if(!(km > 0)) return toast('请先填距离');
+  /* 0.8–3 km 是「当天有效」区间；区间外一样能跑（多跑不算作弊），只在填写处给提示 */
+
+  LANE = lane;
+
+  const tgt = (SRV === 'real') ? '学校服务器' : '本机模拟';
+  const effLap = GEO.trackLapLength(lane);
+  if(!confirm('将向【' + tgt + '】提交一条跑步记录：\n\n'
+      + '第 ' + lane + ' 道 · ' + Math.round(km*1000/effLap) + ' 圈 · ' + km.toFixed(2) + ' km · '
+      + Math.floor(pace/60) + ':' + String(pace%60).padStart(2,'0') + ' /km · ' + (sex==='male'?'男':'女')
+      + '\n\n确认上传？（一天只能合格一次）')) return;
+
+  btn.disabled = true; $('#resCard').hidden = true; $('#prog').hidden = false;
+  $('#upTip').hidden = false; $('#runTip').hidden = false;
+  toast('已开跑 · 出现「成功 / 失败」结果前请不要关闭本页', 6500);
+  $('#verdict').innerHTML = ''; $('#steps').innerHTML = '';
+  $('#phase').innerHTML = '<span class="spin"></span>准备…'; $('#timer').textContent='—'; $('#pos').textContent='—';
+  $('#eta').textContent='—'; $('#stopUp').disabled = true; $('#stopDrop').disabled = true;
+  try{
+    if(!RUN.sid) throw new Error('还没登录，请先登录');
+    const base = BASE;
+
+    /* 生成跑道点（起点 / 道次随机） */
+    const phaseDeg = Math.round(Math.random()*3600)/10;
+    const pts = GEO.trackLoop({ lat:CENTER.lat, lng:CENTER.lng, lane, headingDeg:0,
+                                ccw:true, spacingM:2.0, phaseDeg })
+                  .map(p=>[+p.lng.toFixed(7), +p.lat.toFixed(7)]);
+
+    const params = {
+      points: pts, target_km: +km.toFixed(3), pace_s_per_km: pace,
+      sample_interval_s: 1.0, speed_jitter: 0.08, interval_jitter_s: 0,
+      warmup_s: 0, cooldown_s: 0, stop_tail_s: 33, stop_walk_mps: 1.5,
+      gps_outage_p: 0.5, mid_pauses: [], pause_count: 0,
+      sex: sex, stride_jitter: 0.05, loop_mode: 'track', run_type: 1, crs: 'wgs84',
+      track_lateral_m: 0.4, track_pace_pct: 0.03, coord_jitter_deg: 0,
+      target_jitter_m: 100,
+      setting: null, device: DEVICE,
+      start_face: true, end_face: true, middle_faces: [], app_version: APP_VER,
+    };
+
+    /* 开跑（实时：按计划真实用时跑一遍；长任务轮询） */
+    $('#phase').innerHTML = '<span class="spin"></span>开跑…';
+    let r = await api('/api/stage/run', {
+      sid: RUN.sid, chain: 'v2', base,
+      params, faces: true, realtime: true, speed: 1, device: DEVICE, app_version: APP_VER, run_type: 1 });
+
+    if(r.async && r.job){
+      RUN.job = r.job;
+      $('#stopUp').disabled = false; $('#stopDrop').disabled = false;
+      for(let i=0; ; i++){
+        await new Promise(res=>setTimeout(res, 700));
+        const st = await fetch('/api/stage/run/status?id='+encodeURIComponent(RUN.job)).then(x=>x.json());
+        if(st.error) throw new Error(st.error);
+        $('#phase').textContent = (st.phase||'运行中');
+        $('#timer').textContent = st.total_ms ? (fmtMS(st.done_ms)+' / '+fmtMS(st.total_ms)) : fmtMS(st.elapsed_ms||0);
+        $('#eta').textContent = st.total_ms ? fmtMS(Math.max(0, st.total_ms - st.done_ms)) : '—';
+        $('#bar').value = st.total_ms ? Math.min(100,(st.done_ms||0)/st.total_ms*100) : 0;
+        const p = st.pos;
+        $('#pos').textContent = p ? ('已跑 '+(p.cum_m/1000).toFixed(2)+' / '+(p.total_m/1000).toFixed(2)
+            +' km · 点 '+(p.idx+1)+'/'+p.n+' · '+(p.speed_mps||0).toFixed(2)+' m/s') : '—';
+        if(st.state !== 'running'){ r = st.result || { ok:false, steps:st.steps||[], error:st.error||st.state }; break; }
+        if(i > 12000) throw new Error('太久没结束（>2h）');
+      }
+    }
+    RUN.job = '';
+
+    /* 结果 */
+    const rid = r.recordId || (r.gen && r.gen.submit && r.gen.submit.exerciseRecordId) || '';
+    const okSteps = (r.steps||[]).every(s=>s.ok);
+    $('#verdict').innerHTML = '<div class="verdict '+(r.ok&&okSteps?'ok':'no')+'">'
+      + (r.ok && okSteps ? ('✓ 完成' + (rid?(' · 记录号 '+rid):'') + (SRV==='real'?'（已提交）':'（模拟上传）'))
+                         : ('✗ 未完成：' + (r.error || ((r.steps||[]).filter(s=>!s.ok).length+' 步失败'))))
+      + '</div>';
+    renderSteps(r);
+    $('#prog').hidden = true; $('#upTip').hidden = true;
+    $('#resCard').hidden = false;
+    toast(r.ok && okSteps ? '跑完并上传成功' : '跑完但有失败，看回执');
+  }catch(e){
+    RUN.job = ''; $('#prog').hidden = true; $('#upTip').hidden = true;
+    $('#verdict').innerHTML = '<div class="verdict no">✗ 出错：'+ (e.message||e) +'</div>';
+    $('#resCard').hidden = false;
+    toast('出错：'+(e.message||e), 5000);
+  }finally{
+    btn.disabled = false;
+  }
+};
+
+/* 中途停止：停止并上传（mode=stop，按已跑段提交）/ 停止不上传（mode=abort，什么都不传） */
+async function stopRun(mode){
+  if(!RUN.job) return;
+  const up = $('#stopUp'), dr = $('#stopDrop');
+  if(up.disabled || dr.disabled) return;
+  if(mode === 'abort' && !confirm('放弃本次？这一条不会上传。')) return;
+  up.disabled = dr.disabled = true;
+  $('#phase').innerHTML = '<span class="spin"></span>' + (mode === 'abort' ? '正在中止…' : '正在停止并上传…');
+  try{
+    await fetch('/api/stage/run/cancel', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ id: RUN.job, mode }) });
+  }catch(e){}
+}
+$('#stopUp').onclick  = ()=>stopRun('stop');
+$('#stopDrop').onclick = ()=>stopRun('abort');
+
+/* ---------------- 查询历史（只读；不写任何记录） ---------------- */
+function recTime(r){
+  const a = r.addTime || r.createTime || r.endTime || r.startTime;
+  if(a == null) return '';
+  if(typeof a === 'number' || /^\d{10,}$/.test(String(a))){
+    const n = +a, ms = String(Math.trunc(n)).length >= 13 ? n : n*1000;
+    const d = new Date(ms);
+    if(!isNaN(d.getTime())) return d.toLocaleString('zh-CN', {hour12:false});
+  }
+  return String(a);
+}
+function recDur(s){ s = Math.max(0, Math.round(+s||0));
+  return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+async function doHistory(){
+  const btn = $('#histBtn');
+  if(!LOGGED) return toast('先登录再查');
+  if(btn.disabled) return;
+  btn.disabled = true; $('#histMsg').textContent = '读取中…'; $('#histList').innerHTML = '';
+  try{
+    const body = { server:SRV, sid:RUN.sid, base:BASE, device:DEVICE, app_version:APP_VER,
+                   status:1, page:1, username:$('#user').value.trim() };
+    if(!RUN.sid) body.password = $('#pass').value;
+    const r = await api('/api/gdfe/history', body);
+    if(!r.ok){ $('#histMsg').textContent = '读取失败：' + (r.error || '看回执'); toast('读取失败'); return; }
+    const recs = r.records || [], s = r.sum || {};
+    const met = (s.sumDistance!=null ? ' · 累计 ' + (s.sumCount ?? '?') + ' 次 / ' + s.sumDistance + ' km'
+                                     : (s.runSportRange!=null ? ' · 累计 ' + s.runSportRange + ' km' : ''));
+    $('#histMsg').textContent = '读到 ' + recs.length + ' 条' + met;
+    if(!recs.length){ $('#histList').innerHTML = '<div class="hint">没有读到记录。</div>'; return; }
+    $('#histList').innerHTML = recs.map(x=>{
+      const km = (x.sportRange ?? x.range ?? x.kilometre ?? '');
+      const dur = (x.sportTime != null) ? recDur(x.sportTime) : '';
+      const rem = String(x.remark || x.sportStatus || x.status || '');
+      const ok = String(x.status) === '1' || /合格/.test(rem);
+      return '<div class="stat"><span>' + recTime(x) + '</span><b style="color:'
+        + (ok ? 'var(--accent)' : 'var(--muted)') + '">' + km + ' km · ' + dur + ' · ' + rem + '</b></div>';
+    }).join('');
+  }catch(e){ $('#histMsg').textContent = '出错：' + (e.message||e); }
+  finally{ btn.disabled = false; }
+}
+$('#histBtn').onclick = doHistory;
+
+/* ---------------- 初始化：回填记住的账号 ---------------- */
+(async ()=>{
+  setLane(0);                                  /* 默认道次：随机 */
+  try{
+    CFG = await fetch('/api/config').then(x=>x.json());
+  }catch(e){}
+  try{
+    const dv = await fetch('/api/gdfe/devices').then(x=>x.json());
+    if(dv && dv.ok) fillDevices(dv.catalog, dv.selected, dv.default, dv.default_saved);
+  }catch(e){}
+  try{
+    const cr = await fetch('/api/gdfe/creds').then(x=>x.json());
+    if(cr && cr.saved){
+      $('#user').value = cr.username || '';
+      $('#pass').value = cr.password || '';
+      $('#remember').checked = true;
+      $('#loginMsg').textContent = '已记住账号，点「登录」即可。';
+    }
+  }catch(e){}
+  rangeHint();
+})();
+</script>
+</body>
+</html>

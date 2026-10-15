@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+build/
+dist/
+*.log
+route-studio-data/
+.gdfe_run_creds.json
+.gdfe_run_ios_code
+.gdfe_run_device.json
